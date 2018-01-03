@@ -2,11 +2,11 @@
     Cross-VC NSX Recovery script
 	Created by Hakan Akkurt
     Jan 2018
-    version 1.1
+    version 1.2
 #>
 	
-Get-Module -ListAvailable PowerCLI* | Import-Module
-Get-Module -ListAvailable PowerNSX* | Import-Module
+Find-Module VMware.PowerCLI | Install-Module –Scope CurrentUser
+Find-Module PowerNSX | Install-Module -scope CurrentUser
 
 Set-PowerCLIConfiguration -invalidcertificateaction "ignore" -confirm:$false |out-null
 Set-PowerCLIConfiguration -Scope Session -WebOperationTimeoutSeconds 3600 -confirm:$false |out-null
