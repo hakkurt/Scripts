@@ -1,3 +1,1 @@
-# Srm-Tests
-
-SRM Test Scripts
+Scripts developed by me
