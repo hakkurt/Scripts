@@ -2,7 +2,7 @@
     Cross-VC NSX Recovery script
 	Created by Hakan Akkurt
     Jan 2018
-    version 1.0
+    version 1.1
 #>
 	
 Get-Module -ListAvailable PowerCLI* | Import-Module
