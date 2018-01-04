@@ -7,8 +7,8 @@
 
 # Check PowerCli and PowerNSX modules
 
-Find-Module VMware.PowerCLI | Install-Module -Name VMware.PowerCLI –Scope CurrentUser
-Find-Module PowerNSX | Install-Module -scope CurrentUser
+Find-Module VMware.PowerCLI | Install-Module -Name VMware.PowerCLI –Scope CurrentUser -Confirm:$False
+Find-Module PowerNSX | Install-Module -scope CurrentUser -Confirm:$False
 
 Set-PowerCLIConfiguration -Scope User -ParticipateInCEIP $false -confirm:$false | out-null
 Set-PowerCLIConfiguration -invalidcertificateaction Ignore -confirm:$false | out-null
