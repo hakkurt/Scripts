@@ -61,10 +61,10 @@ $viConnection = Connect-VIServer $VIServer -User $VIUsername -Password $VIPasswo
 	
 	# Step 1
 	Write-Host -foregroundcolor Green "Disconnect $NSXHostname from the Primary NSX Manager..."
-	Set-NsxManagerRole Standalone -WarningAction Ignore
+	Set-NsxManagerRole Standalone -WarningAction SilentlyContinue
 	
 	Write-Host -foregroundcolor Green "Promote  $NSXHostname from Secondary to Primary..."
-	Set-NsxManagerRole Primary -WarningAction Ignore
+	Set-NsxManagerRole Primary -WarningAction SilentlyContinue
 	
 	# Step 2
 	Write-Host -foregroundcolor Green "Deploying NSX Controllers..."
