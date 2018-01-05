@@ -2,12 +2,12 @@
     Cross-VC NSX Recovery script
 	Created by Hakan Akkurt
     Jan 2018
-    version 1.3
+    version 1.4
 #>
 
 # Check PowerCli and PowerNSX modules
 
-Find-Module VMware.PowerCLI | Install-Module -Name VMware.PowerCLI –Scope CurrentUser -Confirm:$False
+Find-Module VMware.PowerCLI | Install-Module –Scope CurrentUser -Confirm:$False
 Find-Module PowerNSX | Install-Module -scope CurrentUser -Confirm:$False
 
 Set-PowerCLIConfiguration -Scope User -ParticipateInCEIP $false -confirm:$false | out-null
@@ -120,47 +120,58 @@ $viConnection = Connect-VIServer $VIServer -User $VIUsername -Password $VIPasswo
 	$apistr="/api/2.0/vdn/controller/synchronize"
 	 
 	Invoke-NsxRestMethod -Method put -Uri $apistr -InformationAction:SilentlyContinue
-
 	# Step 4
 	My-Logger  "Deploying UDLR CVMs.."
-		
+	
 	$clusterMoRef = $cluster.Id
 	$datastoreMoref = $datastore.Id
 	
 	$clusterMoRef=$clusterMoRef.Replace("ClusterComputeResource-","")
-	$datastoreMoref=$datastoreMoref.Replace("Datastore-","")
+	$datastoreMoref=$datastoreMoref.Replace("Datastore-","") #>
 		
-	$UDLR = Get-NsxLogicalRouter -name $UDLR1Name
-		
-	$UDLRid = $UDLR.id
-	$apistr="/api/4.0/edges/$UDLRid"
-	$UDLRXML=Invoke-NsxRestMethod  -Method get -Uri $apistr
+	$UDLRs = Get-NsxLogicalRouter
 	
-	$appliances=$UDLRXML.SelectSingleNode("//appliances")
-	$child = $UDLRXML.CreateElement("appliance")
-	$appliances.AppendChild($child)
-	
-	$appliances=$UDLRXML.SelectSingleNode("//appliance")
-	$child = $UDLRXML.CreateElement("datastoreId")
-	$appliances.AppendChild($child) 
-	
-	$child = $UDLRXML.CreateElement("resourcePoolId")
-	$appliances.AppendChild($child) 
-		
-	$element = $UDLRXML.SelectSingleNode("//datastoreId")
-	$element.InnerText =$datastoreMoref
-	
-	$element = $UDLRXML.SelectSingleNode("//resourcePoolId")
-	$element.InnerText =$clusterMoRef
+		foreach($UDLR in $UDLRs){
 			
-	$UDLRXML.Save($UDLRid+".xml")
-	$body=$UDLRXML.OuterXml
-	Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
-
+			$UDLRname=$UDLR.name
+			$UDLRid = $UDLR.id
+			
+				if(($UDLR.isUniversal -eq $True) -and ($UDLR.localEgressEnabled -eq $false)){
+				
+					$apistr="/api/4.0/edges/$UDLRid"
+					$UDLRXML=Invoke-NsxRestMethod  -Method get -Uri $apistr
+					
+					$appliances=$UDLRXML.SelectSingleNode("//appliances")
+					$child = $UDLRXML.CreateElement("appliance")
+					$appliances.AppendChild($child)
+					
+					$appliances=$UDLRXML.SelectSingleNode("//appliance")
+					$child = $UDLRXML.CreateElement("datastoreId")
+					$appliances.AppendChild($child) 
+					
+					$child = $UDLRXML.CreateElement("resourcePoolId")
+					$appliances.AppendChild($child) 
+						
+					$element = $UDLRXML.SelectSingleNode("//datastoreId")
+					$element.InnerText =$datastoreMoref
+					
+					$element = $UDLRXML.SelectSingleNode("//resourcePoolId")
+					$element.InnerText =$clusterMoRef
+							
+					$UDLRXML.Save($UDLRid+".xml")
+					$body=$UDLRXML.OuterXml
+					Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
+					
+					My-Logger  "$UDLRname is deployed.."
+					
+				}
+			}
+		
+	
 	$EndTime = Get-Date
 	$duration = [math]::Round((New-TimeSpan -Start $StartTime -End $EndTime).TotalMinutes,2)
 
-	My-Logger  "Duration: $duration minutes"
+	My-Logger  "Duration: $duration minutes" #>
 
 	Disconnect-VIServer -Server $VIServer -confirm:$false | out-null
 	Disconnect-NsxServer
