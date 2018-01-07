@@ -1,5 +1,5 @@
 <# 
-    Set NTP server for all ESXi Hosts
+    Add Host record to multiple ESXi Hosts
 	Created by Hakan Akkurt
     Jan 2018
     version 1.0
@@ -40,8 +40,6 @@ Function My-Logger {
 }
 
 $viConnection = Connect-VIServer $VIServer -User $VIUsername -Password $VIPassword -WarningAction SilentlyContinue
-
-My-Logger "NTP Server will be set to : $NTPServer..." 
 
 $Datacenters=Get-Datacenter
 		
@@ -99,6 +97,5 @@ $Datacenters=Get-Datacenter
 		}
 		
 		
-
 		
 Disconnect-VIServer -Server $VIServer -confirm:$false | out-null
