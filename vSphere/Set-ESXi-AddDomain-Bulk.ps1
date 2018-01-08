@@ -1,6 +1,6 @@
 <# 
     Add ESXi Hosts to AD domain, allow firewall, change advanced settings
-	Created by Hakan Akkurt
+    Created by Hakan Akkurt
     Jan 2018
     version 1.0
 #>
