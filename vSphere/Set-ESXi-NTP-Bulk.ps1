@@ -1,17 +1,20 @@
 <# 
-    Set NTP server for all ESXi Hosts
-    Created by Hakan Akkurt
+    Set NTP and DNS server for all ESXi Hosts
+	Created by Hakan Akkurt
     Jan 2018
-    version 1.0
+    version 1.1
 #>
 
-# Deployment Parameters
+# Parameters
 $VIServer = "dt-odc3-vcsa01.onat.local"
 $VIUsername = "administrator@vsphere.local"
 $VIPassword = "VMware1!"
 $verboseLogFile = "ScriptLogs.log"
 $NTPServer = "10.97.2.10"
-
+$ClusterName ="CL-ODC3-COMP01"
+$DomainName="onat.local"
+$DnsPri="10.97.2.10"
+$DnsSec="10.97.20.10"
 
 Find-Module VMware.PowerCLI | Install-Module –Scope CurrentUser -Confirm:$False
 
@@ -47,13 +50,19 @@ $Datacenters=Get-Datacenter
 				
 				foreach ($Cluster in $Clusters) {
 					
-					$ClusterName = $Cluster.name					
+					$CurrentClusterName = $Cluster.name	
+					Write-Host -ForegroundColor Yellow "	Cluster Name : "$CurrentClusterName					
+					
+					if ($CurrentClusterName -eq $ClusterName){
+					
 					$VMHosts=Get-VMHost -Location $ClusterName
 					
 						foreach ($VMHost in $VMHosts) {
 							
 							$VMHostName = $VMHost.name		
 								
+							# NTP Configuration
+							
 							$ntp = Get-VMHostNtpServer -VMHost $VMHost
 							
 							My-Logger "Clearing current NTP Server for $VMHostName..."
@@ -75,8 +84,13 @@ $Datacenters=Get-Datacenter
 							My-Logger "$ntp Service on $VMHost was Off and has been started"
 							}
 							
-						
+							# DNS Configuration
+							
+							My-Logger "Setting DNS for $VMHostName..."
+							Get-VMHostNetwork -VMHost $VMHost | Set-VMHostNetwork -DomainName $DomainName -DNSAddress $DnsPri , $DnsSec -Confirm:$false | out-null
+							
 						}
+					}
 				}
 		}
 		
