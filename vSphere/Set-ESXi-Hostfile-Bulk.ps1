@@ -1,5 +1,5 @@
 <# 
-    Add Host record to multiple ESXi Hosts
+    Add etc/hosts file records to multiple ESXi Hosts
 	Created by Hakan Akkurt
     Jan 2018
     version 1.0
@@ -19,7 +19,7 @@ $addIP = "192.168.1.151"
 $addHostname = "newhostsname"
 
 
-Find-Module VMware.PowerCLI | Install-Module –Scope CurrentUser -Confirm:$False
+Find-Module VMware.PowerCLI | Install-Module â€“Scope CurrentUser -Confirm:$False
 
 Set-PowerCLIConfiguration -Scope User -ParticipateInCEIP $false -confirm:$false | out-null
 Set-PowerCLIConfiguration -invalidcertificateaction Ignore -confirm:$false | out-null
