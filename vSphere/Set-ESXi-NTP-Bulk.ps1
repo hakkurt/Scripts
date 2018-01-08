@@ -1,6 +1,6 @@
 <# 
     Set NTP server for all ESXi Hosts
-	Created by Hakan Akkurt
+    Created by Hakan Akkurt
     Jan 2018
     version 1.0
 #>
@@ -13,7 +13,7 @@ $verboseLogFile = "ScriptLogs.log"
 $NTPServer = "10.97.2.10"
 
 
-Find-Module VMware.PowerCLI | Install-Module –Scope CurrentUser -Confirm:$False
+Find-Module VMware.PowerCLI | Install-Module â€“Scope CurrentUser -Confirm:$False
 
 Set-PowerCLIConfiguration -Scope User -ParticipateInCEIP $false -confirm:$false | out-null
 Set-PowerCLIConfiguration -invalidcertificateaction Ignore -confirm:$false | out-null
