@@ -1,6 +1,6 @@
 ﻿<# 
     Create Bulk Logical Switch script
-	Created by Hakan Akkurt
+    Created by Hakan Akkurt
     Jan 2018
     version 1.0
 #>
@@ -98,10 +98,10 @@ $StartTime = Get-Date
 			$LSName= $cell.LSName
 			My-Logger  "Creating  $LSName .."
 		
-			$xmlbody = "<virtualWireCreateSpec>
-						<name>$LSName</name>
-						<tenantId>virtual wire tenant</tenantId>
-						</virtualWireCreateSpec>"
+			$xmlbody = 	"<virtualWireCreateSpec>
+					<name>$LSName</name>
+					<tenantId>virtual wire tenant</tenantId>
+					</virtualWireCreateSpec>"
 
 			$r=Invoke-WebRequest -Uri "$NSXURI/api/2.0/vdn/scopes/$vdnscope/virtualwires" -Body $xmlbody -Method:Post -headers $head -ContentType "application/xml" -ErrorAction:Stop -TimeoutSec 180
 			
