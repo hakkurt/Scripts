@@ -33,7 +33,7 @@ $global:VMDatastore = "vsanDatastore"
 $global:VMCluster = "Cluster"
 $global:NSXssoUsername = "administrator@vsphere.local"
 $global:NSXssoPassword = "VMware1!"
-$global:NsxlicenseKey = "9020L-JL24J-38980-030A6-9TK50"
+$global:NsxlicenseKey = ""
 $global:ControllerPoolStartIp = "192.168.1.161"
 $global:ControllerPoolEndIp = "192.168.1.163"
 $global:ControllerNetworkSubnetMask = "255.255.255.0"
@@ -136,7 +136,7 @@ Function My-Logger {
 
 	Write-Host -ForegroundColor Yellow "Checking PowerCli and PowerNSX Modules ..."
 	
-	Find-Module VMware.PowerCLI | Install-Module –Scope CurrentUser -Confirm:$False
+	Find-Module VMware.PowerCLI | Install-Module â€“Scope CurrentUser -Confirm:$False
 	Find-Module PowerNSX | Install-Module -Scope CurrentUser -Confirm:$False
 
 	Set-PowerCLIConfiguration -Scope User -ParticipateInCEIP $false -confirm:$false | out-null
