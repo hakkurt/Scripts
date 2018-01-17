@@ -552,10 +552,9 @@ Function ConfigureNSXManager {
 		Add-XmlElement -xmlRoot $Ldr.CliSettings -xmlElementName "password" -xmlElementText $global:AppliancePassword 
 		$ldr | Set-NsxLogicalRouter -confirm:$false | out-null
 		
-		# Set DLR SSH enabled via XML Element
+		# Set DLR SSH service enable
 		$Ldr = Get-NsxLogicalRouter  -name $global:DLRName
-
-		Add-XmlElement -xmlRoot $Ldr.CliSettings -xmlElementName "remoteAccess" -xmlElementText $true
+		$Ldr.CliSettings.remoteAccess= "$true"
 		$ldr | Set-NsxLogicalRouter -confirm:$false | out-null
 			
 		## Adding DLR interfaces after the DLR has been deployed. This can be done any time if new interfaces are required.
@@ -568,15 +567,15 @@ Function ConfigureNSXManager {
 		write-host -foregroundcolor Green "Adding DB LIF to DLR"
 		$Ldr | New-NsxLogicalRouterInterface -Type Internal -name $global:DbLsName  -ConnectedTo $DbLs -PrimaryAddress $global:DLRDbPrimaryAddress -SubnetPrefixLength $global:DefaultSubnetBits | out-null
 
-		if($global:RoutingProtocol -eq "Static"){
-		
-			## DLR Routing - default route from DLR with a next-hop of the Edge.
-			write-host -foregroundcolor Green "Setting default route on DLR to $EdgeInternalAddress"
+			if($global:RoutingProtocol -eq "Static"){
+			
+				## DLR Routing - default route from DLR with a next-hop of the Edge.
+				write-host -foregroundcolor Green "Setting default route on DLR to $EdgeInternalAddress"
 
-			##The first line pulls the uplink name coz we cant assume we know the index ID
-			$LdrTransitInt = get-nsxlogicalrouter | get-nsxlogicalrouterinterface | ? { $_.name -eq $global:TransitLsName}
-			Get-NsxLogicalRouter $global:DLRName | Get-NsxLogicalRouterRouting | Set-NsxLogicalRouterRouting -DefaultGatewayVnic $LdrTransitInt.index -DefaultGatewayAddress $global:PLR01InternalAddress -confirm:$false | out-null
-		}
+				##The first line pulls the uplink name coz we cant assume we know the index ID
+				$LdrTransitInt = get-nsxlogicalrouter | get-nsxlogicalrouterinterface | ? { $_.name -eq $global:TransitLsName}
+				Get-NsxLogicalRouter $global:DLRName | Get-NsxLogicalRouterRouting | Set-NsxLogicalRouterRouting -DefaultGatewayVnic $LdrTransitInt.index -DefaultGatewayAddress $global:PLR01InternalAddress -confirm:$false | out-null
+			}
 		
 		## Disable DLR firewall
 		$Ldr = get-nsxlogicalrouter $global:DLRName
@@ -589,46 +588,21 @@ Function ConfigureNSXManager {
     # EDGE
 
 	$Edge1 = Get-NsxEdge -name $global:PLR01Name
-	
-	if(!$Edge1) {
-	
-		## Defining the uplink and internal interfaces to be used when deploying the edge. Note there are two IP addresses on these interfaces. $EdgeInternalSecondaryAddress and $EdgeUplinkSecondaryAddress are the VIPs
-		$EdgeUplinkNetwork = get-vdportgroup $global:EdgeUplinkNetworkName -errorAction Stop
-		$edgevnic0 = New-NsxEdgeinterfacespec -index 0 -Name "Uplink" -type Uplink -ConnectedTo $EdgeUplinkNetwork -PrimaryAddress $global:PLR01UplinkAddress -SubnetPrefixLength $global:DefaultSubnetBits
-		$edgevnic1 = New-NsxEdgeinterfacespec -index 1 -Name $global:TransitLsName -type Internal -ConnectedTo $TransitLs -PrimaryAddress $global:PLR01InternalAddress -SubnetPrefixLength $global:DefaultSubnetBits
-		## Deploy appliance with the defined uplinks
-		write-host -foregroundcolor "Green" "Creating Edge $global:PLR01Name"
-		# If Prod deployment disable esg firewall
-			if($global:DeploymentType -eq "Prod"){
-				$Edge1 = New-NsxEdge -name $global:PLR01Name -hostname $global:PLR01Name -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $global:AppliancePassword -FwEnabled:$false -enablessh
-			}
-			else{
-				$Edge1 = New-NsxEdge -name $global:PLR01Name -hostname $global:PLR01Name -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $global:AppliancePassword -FwDefaultPolicyAllow -enablessh
-			}
-			
-			if($global:RoutingProtocol -eq "Static"){
-				##Configure Edge DGW
-				Get-NSXEdge $global:PLR01Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -DefaultGatewayAddress $global:PLR01DefaultGW -confirm:$false | out-null
-			}
-	 }
-	 
-	 if($global:DeploymentType -eq "Prod"){
-	 
-		$Edge2 = Get-NsxEdge -name $global:PLR02Name
-	
-		if(!$Edge2) {
 		
-			## Defining the uplink and internal interfaces to be used when deploying the edge. Note there are two IP addreses on these interfaces. $EdgeInternalSecondaryAddress and $EdgeUplinkSecondaryAddress are the VIPs
+		if(!$Edge1) {
+		
+			## Defining the uplink and internal interfaces to be used when deploying the edge. Note there are two IP addresses on these interfaces. $EdgeInternalSecondaryAddress and $EdgeUplinkSecondaryAddress are the VIPs
 			$EdgeUplinkNetwork = get-vdportgroup $global:EdgeUplinkNetworkName -errorAction Stop
-			$edgevnic0 = New-NsxEdgeinterfacespec -index 0 -Name "Uplink" -type Uplink -ConnectedTo $EdgeUplinkNetwork -PrimaryAddress $global:PLR02UplinkAddress -SubnetPrefixLength $global:DefaultSubnetBits
-			$edgevnic1 = New-NsxEdgeinterfacespec -index 1 -Name $global:TransitLsName -type Internal -ConnectedTo $TransitLs -PrimaryAddress $global:PLR02InternalAddress -SubnetPrefixLength $global:DefaultSubnetBits
+			$edgevnic0 = New-NsxEdgeinterfacespec -index 0 -Name "Uplink" -type Uplink -ConnectedTo $EdgeUplinkNetwork -PrimaryAddress $global:PLR01UplinkAddress -SubnetPrefixLength $global:DefaultSubnetBits
+			$edgevnic1 = New-NsxEdgeinterfacespec -index 1 -Name $global:TransitLsName -type Internal -ConnectedTo $TransitLs -PrimaryAddress $global:PLR01InternalAddress -SubnetPrefixLength $global:DefaultSubnetBits
 			## Deploy appliance with the defined uplinks
-			write-host -foregroundcolor "Green" "Creating Edge $global:PLR02Name"
+			write-host -foregroundcolor "Green" "Creating Edge $global:PLR01Name"
+			# If Prod deployment disable esg firewall
 				if($global:DeploymentType -eq "Prod"){
-					$Edge2 = New-NsxEdge -name $global:PLR02Name -hostname $global:PLR02Name -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $global:AppliancePassword -FwEnabled:$false -enablessh
+					$Edge1 = New-NsxEdge -name $global:PLR01Name -hostname $global:PLR01Name -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $global:AppliancePassword -FwEnabled:$false -enablessh
 				}
 				else{
-					$Edge2 = New-NsxEdge -name $global:PLR02Name -hostname $global:PLR02Name -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $global:AppliancePassword -FwDefaultPolicyAllow -enablessh
+					$Edge1 = New-NsxEdge -name $global:PLR01Name -hostname $global:PLR01Name -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $global:AppliancePassword -FwDefaultPolicyAllow -enablessh
 				}
 				
 				if($global:RoutingProtocol -eq "Static"){
@@ -636,11 +610,36 @@ Function ConfigureNSXManager {
 					Get-NSXEdge $global:PLR01Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -DefaultGatewayAddress $global:PLR01DefaultGW -confirm:$false | out-null
 				}
 		 }
-		 			 
-		write-host "   -> Creating Anti Affinity Rules for PLRs"
-		$antiAffinityVMs=Get-VM | Where {$_.name -like "$global:PLR01Name*" -or $_.name -like "$global:PLR02Name*"}
-		New-DrsRule -Cluster $global:VMCluster -Name SeperatePLRs -KeepTogether $false -VM $antiAffinityVMs | out-null
-	 }
+	 
+		 if($global:DeploymentType -eq "Prod"){
+		 
+			$Edge2 = Get-NsxEdge -name $global:PLR02Name
+		
+			if(!$Edge2) {
+			
+				## Defining the uplink and internal interfaces to be used when deploying the edge. Note there are two IP addreses on these interfaces. $EdgeInternalSecondaryAddress and $EdgeUplinkSecondaryAddress are the VIPs
+				$EdgeUplinkNetwork = get-vdportgroup $global:EdgeUplinkNetworkName -errorAction Stop
+				$edgevnic0 = New-NsxEdgeinterfacespec -index 0 -Name "Uplink" -type Uplink -ConnectedTo $EdgeUplinkNetwork -PrimaryAddress $global:PLR02UplinkAddress -SubnetPrefixLength $global:DefaultSubnetBits
+				$edgevnic1 = New-NsxEdgeinterfacespec -index 1 -Name $global:TransitLsName -type Internal -ConnectedTo $TransitLs -PrimaryAddress $global:PLR02InternalAddress -SubnetPrefixLength $global:DefaultSubnetBits
+				## Deploy appliance with the defined uplinks
+				write-host -foregroundcolor "Green" "Creating Edge $global:PLR02Name"
+					if($global:DeploymentType -eq "Prod"){
+						$Edge2 = New-NsxEdge -name $global:PLR02Name -hostname $global:PLR02Name -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $global:AppliancePassword -FwEnabled:$false -enablessh
+					}
+					else{
+						$Edge2 = New-NsxEdge -name $global:PLR02Name -hostname $global:PLR02Name -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $global:AppliancePassword -FwDefaultPolicyAllow -enablessh
+					}
+					
+					if($global:RoutingProtocol -eq "Static"){
+						##Configure Edge DGW
+						Get-NSXEdge $global:PLR01Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -DefaultGatewayAddress $global:PLR01DefaultGW -confirm:$false | out-null
+					}
+			 }
+						 
+			write-host "   -> Creating Anti Affinity Rules for PLRs"
+			$antiAffinityVMs=Get-VM | Where {$_.name -like "$global:PLR01Name*" -or $_.name -like "$global:PLR02Name*"}
+			New-DrsRule -Cluster $global:VMCluster -Name SeperatePLRs -KeepTogether $false -VM $antiAffinityVMs | out-null
+		 }
 	#####################################
     # OSPF #
 
