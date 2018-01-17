@@ -1,5 +1,5 @@
 <# 
-    Full Blown NSX Deployment with Test or Prod Environments
+    Full Blown NSX Deployment for Test or Prod Environments
 	Created by Hakan Akkurt
     November 2017
     version 1.3
@@ -7,6 +7,7 @@
 
 $ScriptVersion = "1.3"
 $global:DeploymentType = "Prod" # Select Prod or Test
+$global:deploy3ta=$true
 
 # Deployment Parameters
 $VIServer = "vcenter.poc.local"
@@ -18,6 +19,7 @@ $global:DnsServer1 = "192.168.1.175"
 $global:DnsServer2 = "192.168.1.175"
 $global:DnsSuffix = "poc.local"
 $global:ntp = "192.168.1.175"
+$global:vAppLocation = "C:\Scripts\DT-EA01-SHA1.ova"
 
 # NSX Manager Configuration
 $global:NSXOVA =  "C:\Scripts\VMware-NSX-Manager-6.3.5-7119875.ova"
@@ -101,10 +103,56 @@ $global:domainname = $null
 $global:sysLogServer = "192.168.1.165"
 $global:sysLogServerName = $null
 $global:sysLogServerPort = "514"
-$global:VMHostCount = 0
 
 $WaitStep = 30
 $WaitTimeout = 600
+
+#3Tier App Parameters
+$global:vAppName = "Dumlu3TierApp"
+
+#WebTier VMs
+$global:Web01Name = "Web01"
+$global:Web01Ip = "10.0.1.11"
+$global:Web02Name = "Web02"
+$global:Web02Ip = "10.0.1.12"
+
+#AppTier VM
+$global:App01Name = "App01"
+$global:App01Ip = "10.0.2.11"
+
+#DB Tier VM
+$global:Db01Name = "Db01"
+$global:Db01Ip = "10.0.3.11"
+
+##LoadBalancer
+$global:LbName = "LB1"
+$global:LbVipIP = "10.0.1.10"
+$global:LbAlgo = "round-robin"
+$global:WebpoolName = "WebPool1"
+$global:WebVipName = "WebVIP"
+$global:WebAppProfileName = "WebAppProfile"
+$global:VipProtocol = "http"
+$global:HttpPort = "80"
+$global:LBMonitorName = "default_http_monitor"
+
+## Security Groups
+$global:WebSgName = "SG-Web"
+$global:WebSgDescription = "Web Security Group"
+$global:AppSgName = "SG-App"
+$global:AppSgDescription = "App Security Group"
+$global:DbSgName = "SG-Db"
+$global:DbSgDescription = "DB Security Group"
+$global:vAppSgName = "SG-3TierApp"
+$global:vAppSgDescription = "3Tier App ALL Security Group"
+## Security Tags
+$global:WebStName = "ST-Web"
+$global:AppStName = "ST-App"
+$global:DbStName = "ST-DB"
+##IPset
+$global:AppVIP_IpSet_Name = "AppVIP_IpSet"
+$global:InternalESG_IpSet_Name = "InternalESG_IpSet"
+##DFW
+$global:FirewallSectionName = "3TierApp Application"
 
 
 Function My-Logger {
@@ -322,8 +370,8 @@ Function ConfigureNSXManager {
 		$NSXManagerTime = $NSXManagerTimeSettings.datetime
 		$VIServerTime = $viConnection.ExtensionData.CurrentTime()
 		
-		write-host -foregroundcolor Yellow "NSX Manager Time : $NSXManagerTime"
-		write-host -foregroundcolor Yellow "vCenter Time	 : $VIServerTime"
+		# write-host -foregroundcolor Yellow "NSX Manager Time : $NSXManagerTime"
+		# write-host -foregroundcolor Yellow "vCenter Time	 : $VIServerTime"
 		
 			if($NSXManagerTime -ne $VIServerTime){
 				write-host -foregroundcolor red "There is a time difference between NSX Manager and vCenter. Registration may fail ..."
@@ -399,7 +447,7 @@ Function ConfigureNSXManager {
 		
 		# Create anti-affinity rule for prod installation
  
-		 if(($global:VMHostCount -ge 3) -and ($global.deployment -eq "prod"))
+		 if($global.deployment -eq "Prod")
 		 
 		 {
 		 write-host "   -> Creating Anti Affinity Rules for Controllers"
@@ -513,8 +561,10 @@ Function ConfigureNSXManager {
 		else {
 			$TransitLs = Get-NsxTransportZone | New-NsxLogicalSwitch $global:TransitLsName
 		}
-		if (Get-NsxLogicalSwitch $global:MgmtLsName) {
-			$MgmtLs = Get-NsxLogicalSwitch $global:MgmtLsName            
+		if (Get-NsxLogicalSwitch $global:EdgeHALsName) {
+		
+			$MgmtLs = Get-NsxLogicalSwitch $global:EdgeHALsName   
+			write-host -foregroundcolor "Yellow" "	$global:EdgeHALsName is already exist..."				
         }
 		else {
 			$MgmtLs = Get-NsxTransportZone | New-NsxLogicalSwitch $global:MgmtLsName 
@@ -556,7 +606,14 @@ Function ConfigureNSXManager {
 		$Ldr = Get-NsxLogicalRouter  -name $global:DLRName
 		$Ldr.CliSettings.remoteAccess= "$true"
 		$ldr | Set-NsxLogicalRouter -confirm:$false | out-null
-			
+		
+		# Change DLR Name
+		write-host -foregroundcolor Green "DLR Hostname is setting ..."
+		$Ldr = Get-NsxLogicalRouter  -name $global:DLRName
+		$Ldr.fqdn=$global:DLRName
+		$ldr | Set-NsxLogicalRouter -confirm:$false | out-null
+
+						
 		## Adding DLR interfaces after the DLR has been deployed. This can be done any time if new interfaces are required.
 		write-host -foregroundcolor Green "Adding Web LIF to DLR"
 		$Ldr | New-NsxLogicalRouterInterface -Type Internal -name $global:WebLsName  -ConnectedTo $WebLs -PrimaryAddress $global:DLRWebPrimaryAddress -SubnetPrefixLength $global:DefaultSubnetBits | out-null
@@ -605,10 +662,24 @@ Function ConfigureNSXManager {
 					$Edge1 = New-NsxEdge -name $global:PLR01Name -hostname $global:PLR01Name -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $global:AppliancePassword -FwDefaultPolicyAllow -enablessh
 				}
 				
+			# Disabling Reverse Path Forwarding (RPF) for $global:PLR02Name  ...
+			$Edge1 = Get-NsxEdge -name $global:PLR01Name			
+			$Edge1Id=$Edge1.id
+			
+			$apistr="/api/4.0/edges/$Edge1Id/systemcontrol/config"
+			$body="<systemControl>
+			<property>sysctl.net.ipv4.conf.all.rp_filter=0</property>
+			<property>sysctl.net.ipv4.conf.vNic_0.rp_filter=0</property>
+			<property>sysctl.net.ipv4.conf.vNic_1.rp_filter=0</property>
+			</systemControl>"
+
+			Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
+
 				if($global:RoutingProtocol -eq "Static"){
 					##Configure Edge DGW
 					Get-NSXEdge $global:PLR01Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -DefaultGatewayAddress $global:PLR01DefaultGW -confirm:$false | out-null
 				}
+				
 		 }
 	 
 		 if($global:DeploymentType -eq "Prod"){
@@ -630,10 +701,24 @@ Function ConfigureNSXManager {
 						$Edge2 = New-NsxEdge -name $global:PLR02Name -hostname $global:PLR02Name -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $global:AppliancePassword -FwDefaultPolicyAllow -enablessh
 					}
 					
+				# Disabling Reverse Path Forwarding (RPF) for $global:PLR02Name  ...
+				$Edge2 = Get-NsxEdge -name $global:PLR02Name			
+				$Edge2Id=$Edge2.id
+				
+				$apistr="/api/4.0/edges/$Edge2Id/systemcontrol/config"
+				$body="<systemControl>
+				<property>sysctl.net.ipv4.conf.all.rp_filter=0</property>
+				<property>sysctl.net.ipv4.conf.vNic_0.rp_filter=0</property>
+				<property>sysctl.net.ipv4.conf.vNic_1.rp_filter=0</property>
+				</systemControl>"
+
+				Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
+					
 					if($global:RoutingProtocol -eq "Static"){
 						##Configure Edge DGW
 						Get-NSXEdge $global:PLR01Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -DefaultGatewayAddress $global:PLR01DefaultGW -confirm:$false | out-null
 					}
+					
 			 }
 						 
 			write-host "   -> Creating Anti Affinity Rules for PLRs"
@@ -774,10 +859,165 @@ Function ConfigureNSXManager {
 	}
 	
      write-host -foregroundcolor Green "`nNSX Infrastructure Configuration Complete`n" 
- 		
-     Disconnect-NsxServer
+ 
 }
+
+Function Deploy3TierApp { 
 	
+	# OVF Application
+	
+	Connect-NSXServer -Server $global:NSXHostname -Username admin -Password $global:NSXUIPassword -DisableVIAutoConnect -WarningAction SilentlyContinue
+
+    write-host -foregroundcolor "Green" "Deploying 3Tier Application "
+
+    # vCenter and the VDS have no understanding of a "Logical Switch". It only sees it as a VDS portgroup.
+    # This step uses Get-NsxBackingPortGroup to determine the actual PG name that the VM attaches to.
+    # Also - realise that a single LS could be (and is here) backed by multiple PortGroups, so we need to
+    # get the PG in the right VDS (compute)
+    # First work out the VDS used in the compute cluster (This assumes you only have a single VDS per cluster.
+    # If that isnt the case, we need to get the VDS by name....:
+	
+    $WebNetwork = get-nsxlogicalswitch $global:WebLsName | Get-NsxBackingPortGroup 
+    $AppNetwork = get-nsxlogicalswitch $global:AppLsName | Get-NsxBackingPortGroup  
+    $DbNetwork =  get-nsxlogicalswitch $global:DbLsName | Get-NsxBackingPortGroup 
+	
+    # Get OVF configuration so we can modify it.
+    $OvfConfiguration = Get-OvfConfiguration -Ovf $global:vAppLocation
+
+    # Network attachment.
+    $OvfConfiguration.NetworkMapping.vxw_dvs_16_universalwire_12_sid_50003_EA1_Web.Value = $WebNetwork.name
+    $OvfConfiguration.NetworkMapping.vxw_dvs_16_universalwire_13_sid_50004_EA1_App.Value = $AppNetwork.name
+    $OvfConfiguration.NetworkMapping.vxw_dvs_16_universalwire_14_sid_50005_EA1_Db.Value = $DbNetwork.name
+
+    # VM details.
+    $OvfConfiguration.common.Web01_IP.Value = $global:Web01Ip
+    $OvfConfiguration.common.Web02_IP.Value = $global:Web02Ip 
+    $OvfConfiguration.common.Web_Gateway.Value = $global:DLRWebPrimaryAddress
+    $OvfConfiguration.common.App_IP.Value = $global:App01Ip
+    $OvfConfiguration.common.App_Gateway.Value = $global:DLRAppPrimaryAddress
+    $OvfConfiguration.common.DB_IP.Value = $global:DB01Ip
+    $OvfConfiguration.common.DB_Gateway.Value = $global:DLRDbPrimaryAddress
+	
+	$Cluster = Get-Cluster -Name $global:VMCluster
+	$vmhost = Get-VMHost -Location $cluster | Where { $_.ConnectionState -eq "Connected" } | Get-Random # Select a connected host
+	$datastore = Get-Datastore -Name $global:VMDatastore
+	
+    # Run the deployment.
+    Import-vApp -Source $global:vAppLocation -OvfConfiguration $OvfConfiguration -Name $global:vAppName -Location $Cluster -VMHost $vmhost -Datastore $datastore | out-null
+    write-host -foregroundcolor "Green" "Starting $vAppName vApp components"
+    try {
+        Start-vApp $global:vAppName | out-null
+        }
+    catch {
+        Write-Warning "Something is wrong with the vApp. Check if it has finished deploying. Press a key to continue";
+        $Key = [console]::ReadKey($true)
+    }
+	
+	#####################################
+    # Load Balancer deployment and configuration
+	
+	## Defining the uplink and internal interfaces to be used when deploying the edge. Note there are two IP addreses on these interfaces. $EdgeInternalSecondaryAddress and $EdgeUplinkSecondaryAddress are the VIPs
+    $WebNetwork = get-nsxlogicalswitch $global:WebLsName 
+	$edgevnic0 = New-NsxEdgeinterfacespec -index 0 -Name "Uplink" -type Uplink -ConnectedTo $WebNetwork -PrimaryAddress $global:LbVipIP -SubnetPrefixLength $global:DefaultSubnetBits
+    
+    ## Deploy appliance with the defined uplinks
+    write-host -foregroundcolor "Green" "Creating Load Balancer"
+    $Edge1 = New-NsxEdge -name $global:LbName -cluster $Cluster -datastore $datastore -Interface $edgevnic0 -Password $global:AppliancePassword -FwDefaultPolicyAllow
+
+    ##Configure Edge DGW
+    Get-NSXEdge $global:LbName | Get-NsxEdgeRouting | Set-NsxEdgeRouting -DefaultGatewayAddress $global:DLRWebPrimaryAddress -confirm:$false | out-null
+
+    # Enable Loadbalancing on $edgeName
+    write-host -foregroundcolor "Green" "Enabling LoadBalancing on $EdgeName"
+    Get-NsxEdge $global:LbName | Get-NsxLoadBalancer | Set-NsxLoadBalancer -Enabled | out-null
+
+    #Get default monitor.
+    $monitor =  get-nsxedge $global:LbName | Get-NsxLoadBalancer | Get-NsxLoadBalancerMonitor -Name $global:LBMonitorName
+
+    # Define pool members. Webpool via predefine memberspec first...
+    write-host -foregroundcolor "Green" "Creating Web Pool"
+    $webpoolmember1 = New-NsxLoadBalancerMemberSpec -name $global:Web01Name -IpAddress $global:Web01Ip -Port $global:HttpPort
+    $webpoolmember2 = New-NsxLoadBalancerMemberSpec -name $global:Web02Name -IpAddress $global:Web02Ip -Port $global:HttpPort
+
+    # ... And create the web pool
+    $WebPool =  Get-NsxEdge $global:LbName | Get-NsxLoadBalancer | New-NsxLoadBalancerPool -name $global:WebPoolName -Description "Web Tier Pool" -Transparent:$false -Algorithm $global:LbAlgo -Memberspec $webpoolmember1, $webpoolmember2 -Monitor $Monitor
+
+    # Create App Profile
+    write-host -foregroundcolor "Green" "Creating Application Profiles for Web Servers"
+    $WebAppProfile = Get-NsxEdge $global:LbName | Get-NsxLoadBalancer | New-NsxLoadBalancerApplicationProfile -Name $global:WebAppProfileName  -Type $global:VipProtocol
+  
+    # Create the VIP for the relevant WebPools.
+    write-host -foregroundcolor "Green" "Creating VIPs"
+    Get-NsxEdge $global:LbName | Get-NsxLoadBalancer | Add-NsxLoadBalancerVip -name $global:WebVipName -Description $global:WebVipName -ipaddress $global:LbVipIP -Protocol $global:VipProtocol -Port $global:HttpPort -ApplicationProfile $WebAppProfile -DefaultPool $WebPool -AccelerationEnabled | out-null
+  
+    #####################################
+    # Microseg config
+
+    write-host -foregroundcolor Green "Getting Services"
+
+    # Assume these services exist which they do in a default NSX deployment.
+    $httpservice = New-NsxService -name "TCP-80" -protocol tcp -port "80"
+	$apacheservice = New-NsxService -name "TCP-8443" -protocol tcp -port "8443"
+    $psqlservice = New-NsxService -name "TCP-5432" -protocol tcp -port "5432"
+
+    #Create Security Tags
+
+    $WebSt = New-NsxSecurityTag -name $global:WebStName
+    $AppSt = New-NsxSecurityTag -name $global:AppStName
+    $DbSt = New-NsxSecurityTag -name $global:DbStName
+
+    # Create IP Sets
+
+    write-host -foregroundcolor "Green" "Creating Source IP Groups"
+    $InternalESG_IpSet = New-NsxIPSet -name $global:LbVipIP -IPAddresses $global:LbVipIP
+
+    write-host -foregroundcolor "Green" "Creating Security Groups"
+
+    #Create SecurityGroups and with static includes
+    $WebSg = New-NsxSecurityGroup -name $global:WebSgName -description $global:WebSgDescription -includemember $WebSt
+    $AppSg = New-NsxSecurityGroup -name $global:AppSgName -description $global:AppSgDescription -includemember $AppSt
+    $DbSg = New-NsxSecurityGroup -name $global:DbSgName -description $global:DbSgDescription -includemember $DbSt
+    $AllSg = New-NsxSecurityGroup -name $global:vAppSgName -description $global:vAppSgName -includemember $WebSg, $AppSg, $DbSg
+
+    # Apply Security Tag to VM's for Security Group membership
+
+    $WebVMs = Get-Vm | ? {$_.name -match ("Web")}
+    $AppVMs = Get-Vm | ? {$_.name -match ("App")}
+    $DbVMs = Get-Vm | ? {$_.name -match ("Db")}
+
+    $WebSt | New-NsxSecurityTagAssignment -ApplyToVm -VirtualMachine $WebVMs | Out-Null
+    $AppSt | New-NsxSecurityTagAssignment -ApplyToVm -VirtualMachine $AppVMs | Out-Null
+    $DbSt | New-NsxSecurityTagAssignment -ApplyToVm -VirtualMachine $DbVMs | Out-Null
+
+    #Building firewall section with value defined in $FirewallSectionName
+    write-host -foregroundcolor "Green" "Creating Firewall Section"
+
+    $FirewallSection = new-NsxFirewallSection $global:FirewallSectionName
+
+    #Actions
+    $AllowTraffic = "allow"
+    $DenyTraffic = "deny"
+
+    #Allows Web VIP to reach WebTier
+    write-host -foregroundcolor "Green" "Creating Web Tier rule"
+    $SourcesRule = get-nsxfirewallsection $global:FirewallSectionName | New-NSXFirewallRule -Name "VIP to Web" -Source $global:LbVipIP -Destination $WebSg -Service $HttpService -Action $AllowTraffic -AppliedTo $WebSg -position bottom
+
+    #Allows Web tier to reach App Tier via the APP VIP and then the NAT'd vNIC address of the Edge
+    write-host -foregroundcolor "Green" "Creating Web to App Tier rules"
+    $WebToApp = get-nsxfirewallsection $global:FirewallSectionName | New-NsxFirewallRule -Name "$WebSgName to $AppSgname" -Source $WebSg -Destination $AppSg -Service $apacheservice -Action $AllowTraffic -AppliedTo $WebSg, $AppSg -position bottom
+  
+    #Allows App tier to reach DB Tier directly
+    write-host -foregroundcolor "Green" "Creating Db Tier rules"
+    $AppToDb = get-nsxfirewallsection $global:FirewallSectionName | New-NsxFirewallRule -Name "$AppSgName to $DbSgName" -Source $AppSg -Destination $DbSg -Service $psqlservice -Action $AllowTraffic -AppliedTo $AppSg, $DbSG -position bottom
+
+    write-host -foregroundcolor "Green" "Creating deny all applied to $vAppSgName"
+    #Default rule that wraps around all VMs within the topolgoy - application specific DENY ALL
+    $3TierAppDenyAll = get-nsxfirewallsection $global:FirewallSectionName | New-NsxFirewallRule -Name "Deny All 3Tier App" -Action $DenyTraffic -AppliedTo $AllSg -position bottom -EnableLogging -tag "$AllSG"
+    write-host -foregroundcolor "Green" "3Tier application deployment complete."
+
+}
+
+
 NSX-Deployment-Precheck
 
 $title = "Confirm NSX Manager Deployment"
@@ -801,10 +1041,17 @@ switch ($result)
 				if(DeployNSXManager -eq $true){
 					ConfigureNSXManager
 					$EndTime = Get-Date
+					
+						if($global:deploy3ta){
+							Deploy3TierApp
+							$EndTime = Get-Date
+						}
+						
 					$duration = [math]::Round((New-TimeSpan -Start $StartTime -End $EndTime).TotalMinutes,2)
 					write-host "Duration: $duration minutes"
 				}
 			Disconnect-VIServer $viConnection -Confirm:$false
+			Disconnect-NsxServer
 		}
         1 {"Deployment is canceled"
 			Disconnect-VIServer $viConnection -Confirm:$false
