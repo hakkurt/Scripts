@@ -531,27 +531,33 @@ Function ConfigureNSXManager {
 		write-host -foregroundcolor "Green" "Creating DLR"
 		$LdrvNic0 = New-NsxLogicalRouterInterfaceSpec -type Uplink -Name $global:TransitLsName -ConnectedTo $TransitLs -PrimaryAddress $global:DLRUplinkAddress -SubnetPrefixLength $global:DefaultSubnetBits
 
-		if($global:DeploymentType -eq "Test"){		
-			# The DLR is created with the first vnic defined, and the datastore and cluster on which the Control VM will be deployed.
-			$Ldr = New-NsxLogicalRouter -name $global:DLRName -interface $LdrvNic0 -ManagementPortGroup $MgmtLs -cluster $cluster -datastore $DataStore			
-			$Ldr = Get-NsxLogicalRouter  -name $global:DLRName
-
-			Add-XmlElement -xmlRoot $Ldr.CliSettings -xmlElementName "password" -xmlElementText $global:AppliancePassword 
-
-			$ldr | Set-NsxLogicalRouter -confirm:$false | out-null
-		}
-	
-		if($global:DeploymentType -eq "Prod"){
-			write-host -foregroundcolor "Green" "Enabling HA for $global:DLRName"
-			# The DLR is created with the first vnic defined, and the datastore and cluster on which the Control VM will be deployed.
-			$Ldr = New-NsxLogicalRouter -name $global:DLRName -interface $LdrvNic0 -ManagementPortGroup $MgmtLs  -cluster $cluster -datastore $DataStore -EnableHA
-			$Ldr = Get-NsxLogicalRouter  -name $global:DLRName
-			
-			Add-XmlElement -xmlRoot $Ldr.CliSettings -xmlElementName "password" -xmlElementText $global:AppliancePassword 
-
-			$ldr | Set-NsxLogicalRouter -confirm:$false | out-null
-		}
+			# No need HA for Test environment
+			if($global:DeploymentType -eq "Test"){		
+				# The DLR is created with the first vnic defined, and the datastore and cluster on which the Control VM will be deployed.
+				$Ldr = New-NsxLogicalRouter -name $global:DLRName -interface $LdrvNic0 -ManagementPortGroup $MgmtLs -cluster $cluster -datastore $DataStore			
+				
+						
+			}
+			# HA will be enabled for Prod environment			
+			if($global:DeploymentType -eq "Prod"){
+				write-host -foregroundcolor "Green" "Enabling HA for $global:DLRName"
+				# The DLR is created with the first vnic defined, and the datastore and cluster on which the Control VM will be deployed.
+				$Ldr = New-NsxLogicalRouter -name $global:DLRName -interface $LdrvNic0 -ManagementPortGroup $MgmtLs  -cluster $cluster -datastore $DataStore -EnableHA
 		
+			}
+					
+		# Set DLR Password via XML Element
+		$Ldr = Get-NsxLogicalRouter  -name $global:DLRName
+
+		Add-XmlElement -xmlRoot $Ldr.CliSettings -xmlElementName "password" -xmlElementText $global:AppliancePassword 
+		$ldr | Set-NsxLogicalRouter -confirm:$false | out-null
+		
+		# Set DLR SSH enabled via XML Element
+		$Ldr = Get-NsxLogicalRouter  -name $global:DLRName
+
+		Add-XmlElement -xmlRoot $Ldr.CliSettings -xmlElementName "remoteAccess" -xmlElementText $true
+		$ldr | Set-NsxLogicalRouter -confirm:$false | out-null
+			
 		## Adding DLR interfaces after the DLR has been deployed. This can be done any time if new interfaces are required.
 		write-host -foregroundcolor Green "Adding Web LIF to DLR"
 		$Ldr | New-NsxLogicalRouterInterface -Type Internal -name $global:WebLsName  -ConnectedTo $WebLs -PrimaryAddress $global:DLRWebPrimaryAddress -SubnetPrefixLength $global:DefaultSubnetBits | out-null
