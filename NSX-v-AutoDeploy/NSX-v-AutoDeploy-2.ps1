@@ -1,11 +1,42 @@
 <# 
     Full Blown NSX Deployment for Test or Prod Environments
 	Created by Hakan Akkurt
-    November 2017
-    version 1.3
+	https://www.linkedin.com/in/hakkurt/
+	November 2017
+    	
+	Script Functionalities
+	
+	- Test or Prod deployment can be selected
+	- Do Pre-Check before deployment
+	- Deploy NSX Manager
+	- Check NSX Manager and vCenter time settings difference
+	- Register NSX Manager to vCenter
+	- Install NSX License
+	- Deploy NSX controllers (Number of controllers will be changed based on deployment type) 
+	- Create Anti-affinity rules for Controllers (For Prod environment only)
+	- Prepare ESXi Host for NSX
+	- Add vCenter to DFW exclusion list
+	- Create Segment ID Pool
+	- Create Transport Zone
+	- Create 5 Logical Switches (Transit, DLR HA, Web, App, Db)
+	- Create 1 DLR, set DLR Hostname and enable SSH
+	- Create 3 DLR LIFs for 3Tier App
+	- Create 2 ESGs
+	- Create Anti-affinity rules for ESGs
+	- Configure routing based on selection (static, OSPF or BGP)
+	- Configure route redistribution
+	- Configure floating static routes on ESGs
+	- Enable ECMP, Disable Graceful Restart and RFP
+	- Set Syslog for all components
+	- Deploy 3Tier App
+	- Create and configure Load Balancer for 3Tier App (Acceleration and logging enabled)
+	- Create Security Groups, Tags, Services and IPsets for 3Tier App
+	- Assign Security Tags to 3Tier App components
+	- Create Firewall rules for 3Tier App
+	
 #>
 
-$ScriptVersion = "1.3"
+$ScriptVersion = "1.4"
 $global:DeploymentType = "Prod" # Select Prod or Test
 $global:deploy3ta=$true
 
@@ -71,12 +102,12 @@ $global:DLRName = "DLR1"
 # Routing Topology 
 $global:PLR01InternalAddress = "10.0.4.11" 
 $global:PLR01UplinkAddress = "192.168.4.11" 
-$global:PLR01DefaultGW = "192.168.4.1"
 $global:PLR01Size = "Large"
 $global:PLR02InternalAddress = "10.0.4.12" 
 $global:PLR02UplinkAddress = "192.168.4.12" 
 $global:PLR02DefaultGW = "192.168.4.1"
 $global:PLR02Size = "Large"
+$global:PLRDefaultGW = "192.168.4.1"
 $global:PLReBGPNeigbour1 ="192.168.4.1"
 $global:DLRUplinkAddress = "10.0.4.1"
 $global:DLR01ProtocolAddress = "10.0.4.2" 
@@ -144,13 +175,16 @@ $global:DbSgName = "SG-Db"
 $global:DbSgDescription = "DB Security Group"
 $global:vAppSgName = "SG-3TierApp"
 $global:vAppSgDescription = "3Tier App ALL Security Group"
+
 ## Security Tags
 $global:WebStName = "ST-Web"
 $global:AppStName = "ST-App"
 $global:DbStName = "ST-DB"
+
 ##IPset
 $global:AppVIP_IpSet_Name = "AppVIP_IpSet"
 $global:InternalESG_IpSet_Name = "InternalESG_IpSet"
+
 ##DFW
 $global:FirewallSectionName = "3TierApp Application"
 
@@ -169,7 +203,16 @@ Function My-Logger {
     $logMessage | Out-File -Append -LiteralPath $verboseLogFile
 }
 
-	Write-Host -ForegroundColor Black "Starting NSX Auto Deploy Script version $ScriptVersion"
+$banner = @"
+ __   _ _______ _     _      _______ _     _ _______  _____       ______  _______  _____          _____  __   __
+ | \  | |______  \___/       |_____| |     |    |    |     |      |     \ |______ |_____] |      |     |   \_/  
+ |  \_| ______| _/   \_      |     | |_____|    |    |_____|      |_____/ |______ |       |_____ |_____|    |   
+
+"@
+
+Write-Host -ForegroundColor magenta $banner 
+
+	Write-Host -ForegroundColor magenta "Starting NSX Auto Deploy Script version $ScriptVersion"
 
 # Check OVA and PowerNSX
 	
@@ -244,30 +287,25 @@ Function NSX-Deployment-Precheck {
 				$ClusterisCompatible = $true
 			}
 				
-			$global:ntp = Get-VMHostNtpServer -VMHost $VMHost
-			if (!$global:ntp ) {
+			$ntp = Get-VMHostNtpServer -VMHost $VMHost
+			if (!$ntp ) {
 				Write-Host -ForegroundColor red "	No NTP setting on $VMHostName"									
 			}
 				
-			$global:dns =  ($VMHost | Get-VMHostNetwork).DNSAddress
-			if (!$global:dns) {
+			$dns =  ($VMHost | Get-VMHostNetwork).DNSAddress
+			if (!$dns) {
 				Write-Host -ForegroundColor red "	No DNS setting on $VMHostName"										
 			}
 				
-			$global:domainname =  ($VMHost | Get-VMHostNetwork).DomainName
-			if (!$global:domainname) {
+			$domainname =  ($VMHost | Get-VMHostNetwork).DomainName
+			if (!$domainname) {
 				Write-Host -ForegroundColor red "	No Domain Name setting on $VMHostName"										
 			}
 				
-			$global:sysLogServer =  $VMHost | Get-VMHostSysLogServer				
-			if (!$global:sysLogServer ) {
+			$sysLogServer =  $VMHost | Get-VMHostSysLogServer				
+			if (!$sysLogServer ) {
 				Write-Host "	No Syslog server setting on $VMHostName"
-			}
-			else{
-				$global:sysLogServerName = $global:sysLogServer.ToString().Split(':')[1] -replace '[//]',''
-				$global:sysLogServerPort = $global:sysLogServer.ToString().Split(':')[-1]									
-			}	
-				#Write-Host -ForegroundColor yellow "			Syslog Server Name :" $sysLogServer							
+			}								
 		}
 		
 		if (!$ClusterisCompatible) {
@@ -292,7 +330,7 @@ Function DeployNSXManager {
 		$NSXManagerVmName = Get-VM -name $global:NSXDisplayName -ErrorAction silentlycontinue
 		
 		if($NSXManagerVmName){
-			Write-Host -ForegroundColor Red "NSX Manager is already deployed"
+			Write-Host -ForegroundColor yellow "NSX Manager is already deployed, skipping deployment phase ..."
 			return $true
 		}
 		else
@@ -380,7 +418,12 @@ Function ConfigureNSXManager {
 		# Configure syslog and vCenter registration
 	    write-host -foregroundcolor green "Configuring NSX Manager`n"
 
-			if ($global:sysLogServer ) {
+			if ($global:sysLogServer) {
+				Write-Host "   -> Performing NSX Manager Syslog configuration..."
+				Set-NsxManager -SyslogServer $global:sysLogServer -SyslogPort $global:sysLogServerPort -SyslogProtocol "UDP" | out-null
+			}
+			
+			if ($global:sysLogServerName ) {
 				Write-Host "   -> Performing NSX Manager Syslog configuration..."
 				Set-NsxManager -SyslogServer $global:sysLogServerName -SyslogPort $global:sysLogServerPort -SyslogProtocol "UDP" | out-null
 			}
@@ -404,7 +447,7 @@ Function ConfigureNSXManager {
 			$LicenseAssignmentManager.UpdateAssignedLicense("nsx-netsec",$global:NsxlicenseKey,$NULL)
 		}
 		else {
-			write-host -foregroundcolor Green "NSX License is already installed ..."
+			write-host -foregroundcolor yellow "NSX License is already installed ..."
 		}
 		
 		write-host -foregroundcolor Green "Complete`n"
@@ -567,7 +610,7 @@ Function ConfigureNSXManager {
 			write-host -foregroundcolor "Yellow" "	$global:EdgeHALsName is already exist..."				
         }
 		else {
-			$MgmtLs = Get-NsxTransportZone | New-NsxLogicalSwitch $global:MgmtLsName 
+			$MgmtLs = Get-NsxTransportZone | New-NsxLogicalSwitch $global:EdgeHALsName 
 		}
 
 	######################################
@@ -610,7 +653,7 @@ Function ConfigureNSXManager {
 		# Change DLR Name
 		write-host -foregroundcolor Green "DLR Hostname is setting ..."
 		$Ldr = Get-NsxLogicalRouter  -name $global:DLRName
-		$Ldr.fqdn=$global:DLRName
+		$Ldr.fqdn="$global:DLRName"
 		$ldr | Set-NsxLogicalRouter -confirm:$false | out-null
 
 						
@@ -634,6 +677,26 @@ Function ConfigureNSXManager {
 				Get-NsxLogicalRouter $global:DLRName | Get-NsxLogicalRouterRouting | Set-NsxLogicalRouterRouting -DefaultGatewayVnic $LdrTransitInt.index -DefaultGatewayAddress $global:PLR01InternalAddress -confirm:$false | out-null
 			}
 		
+			## Enable DLR Syslog
+		
+			if ($global:sysLogServer) {
+			
+			write-host -foregroundcolor Green "Setting Syslog server for $global:DLRName"
+			$Ldr = get-nsxlogicalrouter $global:DLRName
+			$LdrID = $Ldr.id
+				
+			$apistr="/api/4.0/edges/$LdrID/syslog/config"
+			$body="<syslog>
+			<enabled>true</enabled>
+			<protocol>udp</protocol>
+			<serverAddresses>
+			<ipAddress>$global:sysLogServer</ipAddress>
+			</serverAddresses>
+			</syslog>"
+
+			Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
+			}
+			
 		## Disable DLR firewall
 		$Ldr = get-nsxlogicalrouter $global:DLRName
 		$Ldr.features.firewall.enabled = "false"
@@ -674,10 +737,30 @@ Function ConfigureNSXManager {
 			</systemControl>"
 
 			Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
+			
+			## Enable Syslog
+				if ($global:sysLogServer ) {
+			
+					write-host -foregroundcolor Green "Setting syslog server for $global:PLR01Name"
+					
+					$Edge1 = get-NSXEdge -name $global:PLR01Name
+					$Edge1Id=$Edge1.id
+						
+					$apistr="/api/4.0/edges/$Edge1Id/syslog/config"
+					$body="<syslog>
+					<enabled>true</enabled>
+					<protocol>udp</protocol>
+					<serverAddresses>
+					<ipAddress>$global:sysLogServer</ipAddress>
+					</serverAddresses>
+					</syslog>"
 
+					Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
+					}
+					
 				if($global:RoutingProtocol -eq "Static"){
 					##Configure Edge DGW
-					Get-NSXEdge $global:PLR01Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -DefaultGatewayAddress $global:PLR01DefaultGW -confirm:$false | out-null
+					Get-NSXEdge $global:PLR01Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -DefaultGatewayAddress $global:PLRDefaultGW -confirm:$false | out-null
 				}
 				
 		 }
@@ -713,10 +796,29 @@ Function ConfigureNSXManager {
 				</systemControl>"
 
 				Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
+				
+				## Enable Syslog
+					if ($global:sysLogServer ) {
+			
+						write-host -foregroundcolor Green "Setting syslog server for $global:PLR02Name"
+						$Edge2 = Get-NSXEdge -name $global:PLR02Name
+						$Edge2Id=$Edge2.id
+							
+						$apistr="/api/4.0/edges/$Edge2Id/syslog/config"
+						$body="<syslog>
+						 <enabled>true</enabled>
+						<protocol>udp</protocol>
+						<serverAddresses>
+						<ipAddress>$global:sysLogServer</ipAddress>
+						</serverAddresses>
+						</syslog>"
+
+						Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
+					}
 					
 					if($global:RoutingProtocol -eq "Static"){
 						##Configure Edge DGW
-						Get-NSXEdge $global:PLR01Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -DefaultGatewayAddress $global:PLR01DefaultGW -confirm:$false | out-null
+						Get-NSXEdge $global:PLR02Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -DefaultGatewayAddress $global:PLRDefaultGW -confirm:$false | out-null
 					}
 					
 			 }
@@ -858,7 +960,7 @@ Function ConfigureNSXManager {
   
 	}
 	
-     write-host -foregroundcolor Green "`nNSX Infrastructure Configuration Complete`n" 
+     write-host -foregroundcolor green "`nNSX Infrastructure Configuration Complete`n" 
  
 }
 
@@ -926,10 +1028,25 @@ Function Deploy3TierApp {
 
     ##Configure Edge DGW
     Get-NSXEdge $global:LbName | Get-NsxEdgeRouting | Set-NsxEdgeRouting -DefaultGatewayAddress $global:DLRWebPrimaryAddress -confirm:$false | out-null
+	
+	## Enable Syslog
+	$Edge1 = Get-Nsxedge -name $global:LBname
+	$Edge1Id=$Edge1.id
+		
+	$apistr="/api/4.0/edges/$Edge1Id/syslog/config"
+	$body="<syslog>
+	 <enabled>true</enabled>
+	<protocol>udp</protocol>
+	<serverAddresses>
+	<ipAddress>$global:sysLogServer</ipAddress>
+	</serverAddresses>
+	</syslog>"
+
+	Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
 
     # Enable Loadbalancing on $edgeName
     write-host -foregroundcolor "Green" "Enabling LoadBalancing on $EdgeName"
-    Get-NsxEdge $global:LbName | Get-NsxLoadBalancer | Set-NsxLoadBalancer -Enabled | out-null
+    Get-NsxEdge $global:LbName | Get-NsxLoadBalancer | Set-NsxLoadBalancer -Enabled -EnableAcceleration -EnableLogging | out-null
 
     #Get default monitor.
     $monitor =  get-nsxedge $global:LbName | Get-NsxLoadBalancer | Get-NsxLoadBalancerMonitor -Name $global:LBMonitorName
@@ -1013,10 +1130,9 @@ Function Deploy3TierApp {
     write-host -foregroundcolor "Green" "Creating deny all applied to $vAppSgName"
     #Default rule that wraps around all VMs within the topolgoy - application specific DENY ALL
     $3TierAppDenyAll = get-nsxfirewallsection $global:FirewallSectionName | New-NsxFirewallRule -Name "Deny All 3Tier App" -Action $DenyTraffic -AppliedTo $AllSg -position bottom -EnableLogging -tag "$AllSG"
-    write-host -foregroundcolor "Green" "3Tier application deployment complete."
+    write-host -foregroundcolor "green" "3Tier application deployment complete."
 
 }
-
 
 NSX-Deployment-Precheck
 
