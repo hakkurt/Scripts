@@ -1,5 +1,5 @@
 <# 
-    Full Blown NSX Deployment for Test or Prod Environments
+   	Full Blown NSX Deployment for Test or Prod Environments
 	Created by Hakan Akkurt
 	https://www.linkedin.com/in/hakkurt/
 	November 2017
