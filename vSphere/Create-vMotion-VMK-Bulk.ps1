@@ -2,7 +2,7 @@
     Create vMotion VMKernel by using vMotion TCP/IP Stack
 	Created by Hakan Akkurt
     Feb 2018
-    version 1.0
+    version 1.1
 #>
 
 # Parameters
@@ -13,6 +13,7 @@ $verboseLogFile = "ScriptLogs.log"
 
 $ManagementVMK = "vmk0"
 $vMotionIPSegment="192.168.2."
+$vMotionDefaultGateway="192.168.2.1" # Delete value If you don't want to overwrite DG 
 $vDSName = "vDS"
 $vMotionPGName ="vMotion"
 
@@ -54,7 +55,8 @@ $Datacenters=Get-Datacenter
 					
 						foreach ($VMHost in $VMHosts) {
 							
-							$VMHostName = $VMHost.name		
+							$VMHostName = $VMHost.name	
+							$esxcli = Get-EsxCli -VMHost $VMHost -v2						
 							
 							# Get Management VMK IP
 							
@@ -75,21 +77,36 @@ $Datacenters=Get-Datacenter
 							$ip = New-Object VMware.Vim.HostIpConfig
 							$ip.ipAddress = $vMotionVMKIP
 							$ip.subnetMask = '255.255.255.0'
+							
 							$ip.dhcp = $false
 							$ip.ipV6Config = New-Object VMware.Vim.HostIpConfigIpV6AddressConfiguration
 							$ip.ipV6Config.dhcpV6Enabled = $false
 							$ip.ipV6Config.autoConfigurationEnabled = $false
 							$ip.IpV6Config = $ipV6Config
 							$nic.Ip = $ip			 
+							
+							
 
 							$networkSystem = $VMHost.ExtensionData.configManager.NetworkSystem
 							$_this = Get-view -Id ($networkSystem.Type + "-" + $networkSystem.Value)
 							$_this.AddVirtualNic('', $nic) | out-null
 							
 							My-Logger "Setting vMotion VMKernel for $VMHostName with $vMotionVMKIP IP"
+							
+							if($vMotionDefaultGateway){
+							
+								$cArgs = $null
+								$cArgs = $esxcli.network.ip.route.ipv4.add.CreateArgs()
+								$cArgs.gateway = $vMotionDefaultGateway
+								$cArgs.netstack = "vmotion"
+								$cArgs.network = "default"
+								$esxcli.network.ip.route.ipv4.add.invoke($cArgs)| out-null
+								
+								My-Logger "DG is overwritten to $vMotionDefaultGateway for $VMHostName"
+							}
 						
 						}
-						My-Logger "Operation completed"
+						My-Logger "Operation completed..."
 				}
 		}
 		
