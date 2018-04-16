@@ -125,7 +125,7 @@ Write-Host -ForegroundColor magenta $banner
 		exit
 	}
 	
-	Find-Module VMware.PowerCLI | Install-Module –Scope CurrentUser -Confirm:$False
+	Find-Module VMware.PowerCLI | Install-Module â€“Scope CurrentUser -Confirm:$False
 	Find-Module PowerNSX | Install-Module -Scope CurrentUser -Confirm:$False
 
 	Set-PowerCLIConfiguration -Scope User -ParticipateInCEIP $false -confirm:$false | out-null
@@ -316,8 +316,8 @@ Write-Host -ForegroundColor magenta $banner
 				
 		 }
 	 
-	 	 if($PLRMode -eq "ECMP"){
-		 
+	 	 if(($PLRMode -eq "ECMP") -and ($DeploymentIPModel -eq "IPv4") ){
+				 
 			$Edge2 = Get-NsxEdge -name $PLR02Name
 		
 			if(!$Edge2) {
