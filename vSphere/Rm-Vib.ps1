@@ -1,6 +1,6 @@
 <# 
     Remove VIB
-	Created by Hakan Akkurt
+    Created by Hakan Akkurt
     May 2018
     version 1.0
 #>
@@ -41,9 +41,11 @@ $viConnection = Connect-VIServer $VIServer -User $VIUsername -Password $VIPasswo
 			
 			My-Logger "Stopping sfcbd-watchdog service for $VMHostName ...."
 			Get-VMHost -Name $VMHostName | Get-VMHostService | ?{"sfcbd-watchdog" -contains $_.Key} | Stop-VMHostService -confirm:$false  | out-null
+			
 			My-Logger "Removing intelcim-provider for $VMHostName ...."
 			$esxcli = get-esxcli -V2 -vmhost  $VMHost
 			$esxcli.software.vib.remove.Invoke(@{"vibname" = "intelcim-provider"})
+			
 			My-Logger "Starting sfcbd-watchdog service for $VMHostName ...."
 			Get-VMHost -Name $VMHostName | Get-VMHostService | ?{"sfcbd-watchdog" -contains $_.Key} | Start-VMHostService | out-null
 			My-Logger "--------------------------------------"
