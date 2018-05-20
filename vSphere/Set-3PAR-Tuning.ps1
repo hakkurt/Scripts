@@ -56,5 +56,4 @@ $viConnection = Connect-VIServer $VIServer -User $VIUsername -Password $VIPasswo
 			
 		}
 		
-		
 Disconnect-VIServer -Server $VIServer -confirm:$false | out-null
