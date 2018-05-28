@@ -19,66 +19,76 @@
 	
 #>
 
-$ScriptVersion = "1.0"
+$ScriptVersion = "1.1"
 $VNFPrefix = "VoLTE"
 $VNFDesc = "Nokia VoLTE"
+$VRFPrefix = "SIGTRAN1"
 
 # Deployment Parameters
+$DeploymentIPModel = "IPv6" # Select IPv4 or IPv6
+$DeploymentNSXModel = "Local" # Select Local or Universal
 $verboseLogFile = "ScriptLogs.log"
 
 # vCenter Configuration
-$VIServer = "dt-odc4-vcsa01.onat.local"
-$PSCServer = "dt-odc4-psc01.onat.local"
+$VIServer = "vcsa-01a.corp.local"
+$PSCServer = "vcsa-01a.corp.local"
 $VIUsername = "administrator@vsphere.local"
 $VIPassword = "VMware1!"
 
 # NSX Configuration
-$NSXHostname = "dt-odc4-nsx01.onat.local"
+$NSXHostname = "nsxmgr-01a.corp.local"
 $NSXUIPassword = "VMware1!"
-$VMDatastore = "ODC4-LDS2-esxi01"
-$VMCluster = "CL-ODC4-COMP01"
-$EdgeUplinkNetworkName1 = "UL1"
-$EdgeUplinkNetworkName2 = "UL2"
-$TransportZoneName = "TZ4"
+$VMDatastore = "RegionA01-ISCSI01-COMP01"
+$VMCluster = "RegionA01-MGMT01"
+$EdgeUplinkNetworkName = "voLTE-SIGTRAN1-ESGToPhysical"
+$EdgeUplinkNetworkNameIPv6 = "voLTE-SIGTRAN1-ESGToPhysical-IPv6"
+$TransportZoneName = "RegionA0-Global-TZ"
 
 # Logical Switches / Router Names 
-$TransitLsName = $VNFPrefix+"-LS-Transit" 
-$VNFLsName =  $VNFPrefix+"-LS-01" 
-$EdgeHALsName = $VNFPrefix+"-LS-HA"
-$PLR01Name = $VNFPrefix+"-Edge01"
-$PLR02Name = $VNFPrefix+"-Edge02" 
-$DLRName = $VNFPrefix+"-DLR01"
-$UDLRName = $VNFPrefix+"-UDLR01"
+# e.g. LS-voLTE-SIGTRAN1-Transit
+$TransitLsName = "LS-"+$VNFPrefix+"-"+$VRFPrefix+"-Transit" 
+$EdgeHALsName = "LS-"+$VNFPrefix+"-"+$VRFPrefix+"-HA" 
+$PLR01Name = "ESG-"+$VNFPrefix+"-"+$VRFPrefix+"-01" 
+$PLR02Name = "ESG-"+$VNFPrefix+"-"+$VRFPrefix+"-02"  
+$DLRName = "DLR-"+$VNFPrefix+"-"+$VRFPrefix+"-01" 
+$UDLRName = "UDLR-"+$VNFPrefix+"-"+$VRFPrefix+"-01" 
 
 #Get-Random -Maximum 100 - Can be used for Object name creation
 
-# Routing Topology 
-$DeploymentIPModel = "IPv4" # Select IPv4 or IPv6
-$DeploymentNSXModel = "Local" # Select Local or Universal
-$PLR01InternalAddress = "10.0.4.11" 
-$PLR01UplinkAddress = "192.168.4.11" 
-$PLR01Size = "Large"
-$PLR02InternalAddress = "10.0.4.12" 
-$PLR02UplinkAddress = "192.168.4.12" 
-$PLR02DefaultGW = "192.168.4.1"
-$PLR02Size = "Large"
-$PLRDefaultGW = ":200::/64"
-$PLReBGPNeigbour1 ="192.168.5.1"
-$DLRUplinkAddress = "10.0.5.1"
-$DLR01ProtocolAddress = "10.0.5.2" 
-$VNFPrimaryAddress = "10.0.25.1" 
+
+# IPv4 Routing Topology 
+$PLR01InternalAddress = "40.40.40.3" 
+$PLR01UplinkAddress = "10.10.20.2" 
+$PLR01Size = "Compact"
+$PLR02InternalAddress = "40.40.40.4" 
+$PLR02UplinkAddress = "10.10.20.3" 
+$PLR02Size = "Compact"
+$PLReBGPNeigbour1 ="10.10.20.1"
+$DLRUplinkAddress = "40.40.40.1"
+$DLR01ProtocolAddress = "40.40.40.2" 
+
+# VNF External Networks 
+$VNFExternalNetworks = (("LS-voLTE-SIGTRAN1-TAS-01","172.16.100.1"),("LS-voLTE-SIGTRAN1-CFX-01","172.16.110.1"),("LS-voLTE-SIGTRAN1-SBC-01","172.16.120.1"))
 $DefaultSubnetMask = "255.255.255.0" 
 $DefaultSubnetBits = "24" 
 $AppliancePassword = "VMware1!VMware1!"
 $RoutingProtocol = "BGP" # Select BGP or Static
 $PLRMode = "ECMP" # Select ECMP or HA
-$iBGPAS = "65531" 
-$eBGPAS = "65532"
+$iBGPAS = "65033" 
+$eBGPAS = "1"
 $BGPKeepAliveTimer = "1"
-$BGPHoldDownTimer = "3"
+$BGPHoldDownTimer = "4"
+
+# IPv6 Networks 
+$EdgeHALsNameIPv6 = "LS-"+$VNFPrefix+"-"+$VRFPrefix+"-IPv6-HA"
+$VNFNetworkLsNameIPv6 = "LS-"+$VNFPrefix+"-"+$VRFPrefix+"-IPv6" 
+$PLRNameIPv6 = "ESG-"+$VNFPrefix+"-"+$VRFPrefix+"-IPv6-01" 
+$PLRInternalAddressIPv6 = "2a01:8f0:600:2::1" 
+$PLRUplinkAddressIPv6 = "2a01:8f0:400:15::2"
+$PLRDefaultGWIPv6 = "2a01:8f0:400:15::1"
+$IPv6Prefix = "64"
 
 # Parameter initial values
-
 $domainname = $null
 $sysLogServer = "192.168.1.165"
 $sysLogServerName = $null
@@ -125,7 +135,7 @@ Write-Host -ForegroundColor magenta $banner
 		exit
 	}
 	
-	Find-Module VMware.PowerCLI | Install-Module –Scope CurrentUser -Confirm:$False
+	Find-Module VMware.PowerCLI | Install-Module -Scope CurrentUser -Confirm:$False
 	Find-Module PowerNSX | Install-Module -Scope CurrentUser -Confirm:$False
 
 	Set-PowerCLIConfiguration -Scope User -ParticipateInCEIP $false -confirm:$false | out-null
@@ -153,189 +163,149 @@ Write-Host -ForegroundColor magenta $banner
 		Throw  "Error while connecting NSX Manager"
 	}  
 	
+	$StartTime = Get-Date
+	
 	$cluster = Get-Cluster -Name $VMCluster -errorAction Stop		
 	$datastore = Get-Datastore -Name $VMDatastore -errorAction Stop
-	#$PortGroup = Get-VdPortGroup $ControllerNetworkPortGroupName -errorAction Stop
+	
+	if($DeploymentIPModel -eq "IPv4"){	
+		
+		###################################### 
+		#Logical Switches 
 	 
-	 ###################################### 
-     #Logical Switches 
- 
-	# Creates four logical switches 
-	
-     write-host -foregroundcolor "Green" "Creating Logical Switches..." 
- 
-        if (Get-NsxLogicalSwitch $VNFLsName) {
-			$VNFLs = Get-NsxLogicalSwitch $VNFLsName   
-			write-host -foregroundcolor "Yellow" "	$VNFLsName is already exist..."			
-        }
-		else {
-			$VNFLs = Get-NsxTransportZone -name $TransportZoneName | New-NsxLogicalSwitch $VNFLsName
-		}
-
-		if (Get-NsxLogicalSwitch $TransitLsName) {
-			$TransitLs = Get-NsxLogicalSwitch $TransitLsName   
-			write-host -foregroundcolor "Yellow" "	$TransitLsName is already exist..."			
-        }
-		else {
-			$TransitLs = Get-NsxTransportZone -name $TransportZoneName | New-NsxLogicalSwitch $TransitLsName
-		}
-		if (Get-NsxLogicalSwitch $EdgeHALsName) {
+		# Creates logical switches 
 		
-			$MgmtLs = Get-NsxLogicalSwitch $EdgeHALsName   
-			write-host -foregroundcolor "Yellow" "	$EdgeHALsName is already exist..."				
-        }
-		else {
-			$MgmtLs = Get-NsxTransportZone -name $TransportZoneName | New-NsxLogicalSwitch $EdgeHALsName 
-		}
-
-	######################################
-    # DLR
-	
-	if($DeploymentNSXModel -eq "Local"){
-	
-		$Ldr = Get-NsxLogicalRouter -Name "$DLRName" -ErrorAction silentlycontinue
-		
-		if(!$Ldr){
-		
-			# DLR Appliance has the uplink router interface created first.
-			write-host -foregroundcolor "Green" "Creating DLR"
-			$LdrvNic0 = New-NsxLogicalRouterInterfaceSpec -type Uplink -Name $TransitLsName -ConnectedTo $TransitLs -PrimaryAddress $DLRUplinkAddress -SubnetPrefixLength $DefaultSubnetBits
-
-			# HA will be enabled			
+		 write-host -foregroundcolor "Green" "Creating Logical Switches..." 
+	 
+			 foreach ($item in  $VNFExternalNetworks)  {
 				
-			write-host -foregroundcolor "Green" "Enabling HA for $DLRName"
-			# The DLR is created with the first vnic defined, and the datastore and cluster on which the Control VM will be deployed.
+				$LSName =$item[0]
+					if (Get-NsxLogicalSwitch $LSName) {
+						write-host -foregroundcolor "Yellow" "	$LSName is already exist..."			
+					}
+					else {
+						Get-NsxTransportZone -name $TransportZoneName | New-NsxLogicalSwitch $LSName |out-null
+					}
+			   
+			}
 
-			$Ldr = New-NsxLogicalRouter -name $DLRName -interface $LdrvNic0 -ManagementPortGroup $MgmtLs  -Cluster $cluster -datastore $DataStore -EnableHA
-					
-			# Set DLR Password via XML Element
-			$Ldr = Get-NsxLogicalRouter  -name $DLRName
-
-			Add-XmlElement -xmlRoot $Ldr.CliSettings -xmlElementName "password" -xmlElementText $AppliancePassword 
-			$ldr | Set-NsxLogicalRouter -confirm:$false | out-null
+			if (Get-NsxLogicalSwitch $TransitLsName) {
+				$TransitLs = Get-NsxLogicalSwitch $TransitLsName   
+				write-host -foregroundcolor "Yellow" "	$TransitLsName is already exist..."			
+			}
+			else {
+				$TransitLs = Get-NsxTransportZone -name $TransportZoneName | New-NsxLogicalSwitch $TransitLsName |out-null
+			}
+			if (Get-NsxLogicalSwitch $EdgeHALsName) {
 			
-			# Change DLR Name
-			write-host -foregroundcolor Green "DLR Hostname is setting ..."
-			$Ldr = Get-NsxLogicalRouter  -name $DLRName
-			$Ldr.fqdn="$DLRName"
-			$ldr | Set-NsxLogicalRouter -confirm:$false | out-null
+				$MgmtLs = Get-NsxLogicalSwitch $EdgeHALsName   
+				write-host -foregroundcolor "Yellow" "	$EdgeHALsName is already exist..."				
+			}
+			else {
+				$MgmtLs = Get-NsxTransportZone -name $TransportZoneName | New-NsxLogicalSwitch $EdgeHALsName |out-null
+			}
 
+		######################################
+		# DLR
+		
+		if($DeploymentNSXModel -eq "Local"){
+		
+			$Ldr = Get-NsxLogicalRouter -Name "$DLRName" -ErrorAction silentlycontinue
+			
+			if(!$Ldr){
+			
+				# DLR Appliance has the uplink router interface created first.
+				write-host -foregroundcolor "Green" "Creating DLR"
+				$LdrvNic0 = New-NsxLogicalRouterInterfaceSpec -type Uplink -Name $TransitLsName -ConnectedTo $TransitLs -PrimaryAddress $DLRUplinkAddress -SubnetPrefixLength $DefaultSubnetBits
+			
+				# HA will be enabled			
+					
+				write-host -foregroundcolor "Green" "Enabling HA for $DLRName"
+				# The DLR is created with the first vnic defined, and the datastore and cluster on which the Control VM will be deployed.
+
+				$Ldr = New-NsxLogicalRouter -name $DLRName -interface $LdrvNic0 -ManagementPortGroup $MgmtLs  -Cluster $cluster -datastore $DataStore -EnableHA
+				
+				# Create DLR Internal Interfaces
+				write-host -foregroundcolor Green "Adding VNF LIF to DLR"
+				
+				$Ldr = Get-NsxLogicalRouter  -name $DLRName
+				foreach ($item in  $VNFExternalNetworks)  {
+				
+					$LSName =$item[0]
+					$DLRLIFIP = $item[1]
+					$VNFLs = Get-NsxLogicalSwitch $LSName
+					$ldr | New-NsxLogicalRouterInterface -Name $LSName -Type internal -ConnectedTo $VNFLs -PrimaryAddress $DLRLIFIP -SubnetPrefixLength $DefaultSubnetBits
+				}
+				
+				# Set DLR Password via XML Element
+				$Ldr = Get-NsxLogicalRouter  -name $DLRName
+
+				Add-XmlElement -xmlRoot $Ldr.CliSettings -xmlElementName "password" -xmlElementText $AppliancePassword 
+				$ldr | Set-NsxLogicalRouter -confirm:$false | out-null
+				
+				# Change DLR Name
+				write-host -foregroundcolor Green "DLR Hostname is setting ..."
+				$Ldr = Get-NsxLogicalRouter  -name $DLRName
+				$Ldr.fqdn="$DLRName"
+				$ldr | Set-NsxLogicalRouter -confirm:$false | out-null
+
+					## Enable DLR Syslog
+				
+					if ($sysLogServer) {
+					
+						write-host -foregroundcolor Green "Setting Syslog server for $DLRName"
+						$Ldr = get-nsxlogicalrouter $DLRName
+						$LdrID = $Ldr.id
 							
-			## Adding DLR interfaces after the DLR has been deployed. This can be done any time if new interfaces are required.
-			write-host -foregroundcolor Green "Adding VNF LIF to DLR"
-			$Ldr | New-NsxLogicalRouterInterface -Type Internal -name $VNFLsName  -ConnectedTo $VNFLs -PrimaryAddress $VNFPrimaryAddress -SubnetPrefixLength $DefaultSubnetBits | out-null
+						$apistr="/api/4.0/edges/$LdrID/syslog/config"
+						$body="<syslog>
+						<enabled>true</enabled>
+						<protocol>udp</protocol>
+						<serverAddresses>
+						<ipAddress>$sysLogServer</ipAddress>
+						</serverAddresses>
+						</syslog>"
 
-			
-				## Enable DLR Syslog
-			
-				if ($sysLogServer) {
-				
-				write-host -foregroundcolor Green "Setting Syslog server for $DLRName"
-				$Ldr = get-nsxlogicalrouter $DLRName
-				$LdrID = $Ldr.id
-					
-				$apistr="/api/4.0/edges/$LdrID/syslog/config"
-				$body="<syslog>
-				<enabled>true</enabled>
-				<protocol>udp</protocol>
-				<serverAddresses>
-				<ipAddress>$sysLogServer</ipAddress>
-				</serverAddresses>
-				</syslog>"
-
-				Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
-				}
-				
-			## Disable DLR firewall
-			$Ldr = get-nsxlogicalrouter $DLRName
-			$Ldr.features.firewall.enabled = "false"
-			$Ldr | Set-nsxlogicalrouter -confirm:$false | out-null
-
-		}
-	}
-	
-    ######################################
-    # EDGE
-
-	$Edge1 = Get-NsxEdge -name $PLR01Name
-		
-		if(!$Edge1) {
-		
-			## Defining the uplink and internal interfaces to be used when deploying the edge. Note there are two IP addresses on these interfaces. $EdgeInternalSecondaryAddress and $EdgeUplinkSecondaryAddress are the VIPs
-			$EdgeUplinkNetwork = get-vdportgroup $EdgeUplinkNetworkName1 -errorAction Stop
-			$edgevnic0 = New-NsxEdgeinterfacespec -index 0 -Name "Uplink" -type Uplink -ConnectedTo $EdgeUplinkNetwork -PrimaryAddress $PLR01UplinkAddress -SubnetPrefixLength $DefaultSubnetBits
-			$edgevnic1 = New-NsxEdgeinterfacespec -index 1 -Name $TransitLsName -type Internal -ConnectedTo $TransitLs -PrimaryAddress $PLR01InternalAddress -SubnetPrefixLength $DefaultSubnetBits
-			## Deploy appliance with the defined uplinks
-			write-host -foregroundcolor "Green" "Creating Edge $PLR01Name"
-			# If Prod deployment disable esg firewall
-			
-				if($global.PLRMode -eq "HA"){
-					$Edge1 = New-NsxEdge -name $PLR01Name -hostname $PLR01Name -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $AppliancePassword -FwEnabled:$false  -enablessh -enableHA 
-				}
-				else{
-					$Edge1 = New-NsxEdge -name $PLR01Name -hostname $PLR01Name -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $AppliancePassword -FwEnabled:$false -enablessh
-				}
-						
-			# Disabling Reverse Path Forwarding (RPF) for $PLR02Name  ...
-			$Edge1 = Get-NsxEdge -name $PLR01Name			
-			$Edge1Id=$Edge1.id
-			
-			$apistr="/api/4.0/edges/$Edge1Id/systemcontrol/config"
-			$body="<systemControl>
-			<property>sysctl.net.ipv4.conf.all.rp_filter=0</property>
-			<property>sysctl.net.ipv4.conf.vNic_0.rp_filter=0</property>
-			<property>sysctl.net.ipv4.conf.vNic_1.rp_filter=0</property>
-			</systemControl>"
-
-			Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
-			
-			## Enable Syslog
-				if ($sysLogServer ) {
-			
-					write-host -foregroundcolor Green "Setting syslog server for $PLR01Name"
-					
-					$Edge1 = get-NSXEdge -name $PLR01Name
-					$Edge1Id=$Edge1.id
-						
-					$apistr="/api/4.0/edges/$Edge1Id/syslog/config"
-					$body="<syslog>
-					<enabled>true</enabled>
-					<protocol>udp</protocol>
-					<serverAddresses>
-					<ipAddress>$sysLogServer</ipAddress>
-					</serverAddresses>
-					</syslog>"
-
-					Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
+						Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
 					}
 					
-				if($RoutingProtocol -eq "Static"){
-					##Configure Edge DGW
-					Get-NSXEdge $PLR01Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -DefaultGatewayAddress $PLRDefaultGW -confirm:$false | out-null
-				}
-				
-		 }
-	 
-	 	 if(($PLRMode -eq "ECMP") -and ($DeploymentIPModel -eq "IPv4") ){
-				 
-			$Edge2 = Get-NsxEdge -name $PLR02Name
+				## Disable DLR firewall
+				$Ldr = get-nsxlogicalrouter $DLRName
+				$Ldr.features.firewall.enabled = "false"
+				$Ldr | Set-nsxlogicalrouter -confirm:$false | out-null
+
+			}
+		}
 		
-			if(!$Edge2) {
+		######################################
+		# EDGE
+
+		$Edge1 = Get-NsxEdge -name $PLR01Name
 			
-				## Defining the uplink and internal interfaces to be used when deploying the edge. Note there are two IP addreses on these interfaces. $EdgeInternalSecondaryAddress and $EdgeUplinkSecondaryAddress are the VIPs
-				$EdgeUplinkNetwork = get-vdportgroup $EdgeUplinkNetworkName1 -errorAction Stop
-				$edgevnic0 = New-NsxEdgeinterfacespec -index 0 -Name "Uplink" -type Uplink -ConnectedTo $EdgeUplinkNetwork -PrimaryAddress $PLR02UplinkAddress -SubnetPrefixLength $DefaultSubnetBits
-				$edgevnic1 = New-NsxEdgeinterfacespec -index 1 -Name $TransitLsName -type Internal -ConnectedTo $TransitLs -PrimaryAddress $PLR02InternalAddress -SubnetPrefixLength $DefaultSubnetBits
+			if(!$Edge1) {
+			
+				## Defining the uplink and internal interfaces to be used when deploying the edge. Note there are two IP addresses on these interfaces. $EdgeInternalSecondaryAddress and $EdgeUplinkSecondaryAddress are the VIPs
+				$EdgeUplinkNetwork = get-vdportgroup $EdgeUplinkNetworkName -errorAction Stop
+				$edgevnic0 = New-NsxEdgeinterfacespec -index 0 -Name "Uplink" -type Uplink -ConnectedTo $EdgeUplinkNetwork -PrimaryAddress $PLR01UplinkAddress -SubnetPrefixLength $DefaultSubnetBits
+				$edgevnic1 = New-NsxEdgeinterfacespec -index 1 -Name $TransitLsName -type Internal -ConnectedTo $TransitLs -PrimaryAddress $PLR01InternalAddress -SubnetPrefixLength $DefaultSubnetBits
+
 				## Deploy appliance with the defined uplinks
-				write-host -foregroundcolor "Green" "Creating Edge $PLR02Name"
-					$Edge2 = New-NsxEdge -name $PLR02Name -hostname $PLR02Name -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $AppliancePassword -FwEnabled:$false -enablessh
-					
+				write-host -foregroundcolor "Green" "Creating Edge $PLR01Name"
+
+				# If Prod deployment disable esg firewall
 				
+					if($global.PLRMode -eq "HA"){
+						$Edge1 = New-NsxEdge -name $PLR01Name -hostname $PLR01Name -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $AppliancePassword -FwEnabled:$false  -enablessh -enableHA 
+					}
+					else{
+						$Edge1 = New-NsxEdge -name $PLR01Name -hostname $PLR01Name -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $AppliancePassword -FwEnabled:$false -enablessh
+					}
+							
 				# Disabling Reverse Path Forwarding (RPF) for $PLR02Name  ...
-				$Edge2 = Get-NsxEdge -name $PLR02Name			
-				$Edge2Id=$Edge2.id
+				$Edge1 = Get-NsxEdge -name $PLR01Name			
+				$Edge1Id=$Edge1.id
 				
-				$apistr="/api/4.0/edges/$Edge2Id/systemcontrol/config"
+				$apistr="/api/4.0/edges/$Edge1Id/systemcontrol/config"
 				$body="<systemControl>
 				<property>sysctl.net.ipv4.conf.all.rp_filter=0</property>
 				<property>sysctl.net.ipv4.conf.vNic_0.rp_filter=0</property>
@@ -346,14 +316,15 @@ Write-Host -ForegroundColor magenta $banner
 				
 				## Enable Syslog
 					if ($sysLogServer ) {
-			
-						write-host -foregroundcolor Green "Setting syslog server for $PLR02Name"
-						$Edge2 = Get-NSXEdge -name $PLR02Name
-						$Edge2Id=$Edge2.id
+				
+						write-host -foregroundcolor Green "Setting syslog server for $PLR01Name"
+						
+						$Edge1 = get-NSXEdge -name $PLR01Name
+						$Edge1Id=$Edge1.id
 							
-						$apistr="/api/4.0/edges/$Edge2Id/syslog/config"
+						$apistr="/api/4.0/edges/$Edge1Id/syslog/config"
 						$body="<syslog>
-						 <enabled>true</enabled>
+						<enabled>true</enabled>
 						<protocol>udp</protocol>
 						<serverAddresses>
 						<ipAddress>$sysLogServer</ipAddress>
@@ -363,98 +334,213 @@ Write-Host -ForegroundColor magenta $banner
 						Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
 					}
 					
-										
 			 }
-						 
-			write-host "   -> Creating Anti Affinity Rules for PLRs"
-			$antiAffinityVMs=Get-VM | Where {$_.name -like "$PLR01Name*" -or $_.name -like "$PLR02Name*"}
-			New-DrsRule -Cluster $VMCluster -Name SeperatePLRs -KeepTogether $false -VM $antiAffinityVMs | out-null
-		 }
-		
-	
-	#####################################
-    # BGP #
-
-	if($RoutingProtocol -eq "BGP"){    
-	
+		 
+					 
+				$Edge2 = Get-NsxEdge -name $PLR02Name
 			
-		$s = $VNFPrimaryAddress.split(".")
-		$DLRVNFStaticRoute = $s[0]+"."+$s[1]+"."+$s[2]+".0/"+$DefaultSubnetBits
-	
-		write-host -foregroundcolor Green "Configuring $PLR01Name BGP"		
-		$rtg = Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting
-		$rtg | Set-NsxEdgeRouting -EnableEcmp -EnableBgp -RouterId $PLR01InternalAddress -LocalAS $iBGPAS -Confirm:$false | out-null
-
-		$rtg = Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting			
-		$rtg | New-NsxEdgeBgpNeighbour -IpAddress $DLR01ProtocolAddress -RemoteAS $iBGPAS -KeepAliveTimer $BGPKeepAliveTimer -HoldDownTimer $BGPHoldDownTimer  -confirm:$false | out-null
-		$rtg = Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting	
-		$rtg | New-NsxEdgeBgpNeighbour -IpAddress $PLReBGPNeigbour1 -RemoteAS $eBGPAS -KeepAliveTimer $BGPKeepAliveTimer -HoldDownTimer $BGPHoldDownTimer  -confirm:$false | out-null
-		
-		$rtg = Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting		
-		$rtg | Set-NsxEdgeBgp -GracefulRestart:$false -Confirm:$false | out-null
-		
-		
-		write-host -foregroundcolor Green "Configuring Floating Static Routes $PLR01Name"
-		
-		Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRVNFStaticRoute -NextHop $DLR01ProtocolAddress -AdminDistance 240 -confirm:$false | out-null
-
-		
-			if($PLRMode -eq "ECMP"){
- 
-				write-host -foregroundcolor Green "Configuring $PLR02Name BGP"
-				$rtg = Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting
-				$rtg | Set-NsxEdgeRouting -EnableEcmp -EnableBgp -RouterId $PLR02InternalAddress -LocalAS $iBGPAS -Confirm:$false | out-null
+				if(!$Edge2) {
 				
-				$rtg = Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting
-				$rtg | New-NsxEdgeBgpNeighbour -IpAddress $DLR01ProtocolAddress -RemoteAS $iBGPAS -KeepAliveTimer $BGPKeepAliveTimer -HoldDownTimer $BGPHoldDownTimer  -confirm:$false | out-null
-				$rtg = Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting
-				$rtg | New-NsxEdgeBgpNeighbour -IpAddress $PLReBGPNeigbour1 -RemoteAS $eBGPAS -KeepAliveTimer $BGPKeepAliveTimer -HoldDownTimer $BGPHoldDownTimer  -confirm:$false | out-null
-							
-				$rtg = Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting
-				$rtg | Set-NsxEdgeBgp -GracefulRestart:$false -Confirm:$false | out-null
-				
-				write-host -foregroundcolor Green "Configuring Floating Static Routes for $PLR02Name "
-				Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRVNFStaticRoute -NextHop $DLR01ProtocolAddress -AdminDistance 250 -confirm:$false | out-null
-				
-			}
-		
-		write-host -foregroundcolor Green "Configuring DLR BGP"
-		
-			if($PLRMode -eq "ECMP"){
+					## Defining the uplink and internal interfaces to be used when deploying the edge. Note there are two IP addreses on these interfaces. $EdgeInternalSecondaryAddress and $EdgeUplinkSecondaryAddress are the VIPs
+					$EdgeUplinkNetwork = get-vdportgroup $EdgeUplinkNetworkName -errorAction Stop
+					$edgevnic0 = New-NsxEdgeinterfacespec -index 0 -Name "Uplink" -type Uplink -ConnectedTo $EdgeUplinkNetwork -PrimaryAddress $PLR02UplinkAddress -SubnetPrefixLength $DefaultSubnetBits
+					$edgevnic1 = New-NsxEdgeinterfacespec -index 1 -Name $TransitLsName -type Internal -ConnectedTo $TransitLs -PrimaryAddress $PLR02InternalAddress -SubnetPrefixLength $DefaultSubnetBits
 			
-				Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | set-NsxLogicalRouterRouting -EnableEcmp -EnableBgp -RouterId $DLRUplinkAddress -LocalAS $iBGPAS -ProtocolAddress $DLR01ProtocolAddress -ForwardingAddress $DLRUplinkAddress -confirm:$false | out-null
-				Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | New-NsxLogicalRouterBgpNeighbour -IpAddress $PLR02InternalAddress -RemoteAS $iBGPAS -ProtocolAddress $DLR01ProtocolAddress -ForwardingAddress $DLRUplinkAddress  -KeepAliveTimer $BGPKeepAliveTimer -HoldDownTimer $BGPHoldDownTimer -confirm:$false | out-null
-				Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | New-NsxLogicalRouterBgpNeighbour -IpAddress $PLR01InternalAddress -RemoteAS $iBGPAS -ProtocolAddress $DLR01ProtocolAddress -ForwardingAddress $DLRUplinkAddress  -KeepAliveTimer $BGPKeepAliveTimer -HoldDownTimer $BGPHoldDownTimer -confirm:$false | out-null
-			}
-			else {
-				Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | set-NsxLogicalRouterRouting -EnableEcmp:$false -EnableBgp -RouterId $DLRUplinkAddress -LocalAS $iBGPAS -ProtocolAddress $DLR01ProtocolAddress -ForwardingAddress $DLRUplinkAddress -confirm:$false | out-null
-				Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | New-NsxLogicalRouterBgpNeighbour -IpAddress $PLR02InternalAddress -RemoteAS $iBGPAS -ProtocolAddress $DLR01ProtocolAddress -ForwardingAddress $DLRUplinkAddress  -KeepAliveTimer $BGPKeepAliveTimer -HoldDownTimer $BGPHoldDownTimer -confirm:$false | out-null
-			}
+					## Deploy appliance with the defined uplinks
+					write-host -foregroundcolor "Green" "Creating Edge $PLR02Name"
+					$Edge2 = New-NsxEdge -name $PLR02Name -hostname $PLR02Name -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $AppliancePassword -FwEnabled:$false -enablessh
+					
+					# Disabling Reverse Path Forwarding (RPF) for $PLR02Name  ...
+					$Edge2 = Get-NsxEdge -name $PLR02Name			
+					$Edge2Id=$Edge2.id
+					
+					$apistr="/api/4.0/edges/$Edge2Id/systemcontrol/config"
+					$body="<systemControl>
+					<property>sysctl.net.ipv4.conf.all.rp_filter=0</property>
+					<property>sysctl.net.ipv4.conf.vNic_0.rp_filter=0</property>
+					<property>sysctl.net.ipv4.conf.vNic_1.rp_filter=0</property>
+					</systemControl>"
+
+					Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
+					
+					## Enable Syslog
+						if ($sysLogServer ) {
+				
+							write-host -foregroundcolor Green "Setting syslog server for $PLR02Name"
+							$Edge2 = Get-NSXEdge -name $PLR02Name
+							$Edge2Id=$Edge2.id
+								
+							$apistr="/api/4.0/edges/$Edge2Id/syslog/config"
+							$body="<syslog>
+							 <enabled>true</enabled>
+							<protocol>udp</protocol>
+							<serverAddresses>
+							<ipAddress>$sysLogServer</ipAddress>
+							</serverAddresses>
+							</syslog>"
+
+							Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
+						}
+						
+				write-host "Creating Anti Affinity Rules for PLRs"
+				$antiAffinityVMs=Get-VM | Where {$_.name -like "$PLR01Name*" -or $_.name -like "$PLR02Name*"}
+				New-DrsRule -Cluster $VMCluster -Name SeperatePLRs -KeepTogether $false -VM $antiAffinityVMs | out-null
+			 }
+			
 		
-	         
-		write-host -foregroundcolor Green "Configuring Route Redistribution"
-		Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | Set-NsxLogicalRouterRouting -EnableOspfRouteRedistribution:$false -confirm:$false | out-null
-		Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | Set-NsxLogicalRouterRouting -EnableBgpRouteRedistribution:$true -confirm:$false | out-null
-		Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | Get-NsxLogicalRouterRedistributionRule -Learner ospf | Remove-NsxLogicalRouterRedistributionRule -Confirm:$false | out-null
- 		Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | New-NsxLogicalRouterRedistributionRule -Learner bgp -FromConnected -Action permit -confirm:$false | out-null
+		#####################################
+		# BGP #
+
+		if($RoutingProtocol -eq "BGP"){    
 		
-		Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -EnableOspfRouteRedistribution:$false -confirm:$false | out-null
-		Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -EnableBgpRouteRedistribution:$true -confirm:$false | out-null
-		Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting | Get-NsxEdgeRedistributionRule -Learner ospf | Remove-NsxEdgeRedistributionRule -Confirm:$false | out-null
- 		Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting | New-NsxEdgeRedistributionRule -Learner bgp -FromConnected -FromStatic -Action permit -confirm:$false | out-null
+			#$s = $VNFPrimaryAddress.split(".")
+			#$DLRVNFStaticRoute = $s[0]+"."+$s[1]+"."+$s[2]+".0/"+$DefaultSubnetBits
 		
-			if($PLRMode -eq "ECMP"){
-				Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -EnableOspfRouteRedistribution:$false -confirm:$false | out-null
-				Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -EnableBgpRouteRedistribution:$true -confirm:$false | out-null
-				Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting | Get-NsxEdgeRedistributionRule -Learner ospf | Remove-NsxEdgeRedistributionRule -Confirm:$false | out-null
-				Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting | New-NsxEdgeRedistributionRule -Learner bgp -FromConnected -FromStatic -Action permit -confirm:$false | out-null
-			}
-		write-host -foregroundcolor Green "Disabling Graceful Restart"
-		$rtg = Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting
-        $rtg | Set-NsxLogicalRouterBgp -GracefulRestart:$false -confirm:$false | out-null
-  
+			write-host -foregroundcolor Green "Configuring $PLR01Name BGP"		
+			$rtg = Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting
+			$rtg | Set-NsxEdgeRouting -EnableEcmp -EnableBgp -RouterId $PLR01UplinkAddress -LocalAS $iBGPAS -Confirm:$false | out-null
+
+			$rtg = Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting			
+			$rtg | New-NsxEdgeBgpNeighbour -IpAddress $DLR01ProtocolAddress -RemoteAS $iBGPAS -KeepAliveTimer $BGPKeepAliveTimer -HoldDownTimer $BGPHoldDownTimer  -confirm:$false | out-null
+			$rtg = Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting	
+			$rtg | New-NsxEdgeBgpNeighbour -IpAddress $PLReBGPNeigbour1 -RemoteAS $eBGPAS -KeepAliveTimer $BGPKeepAliveTimer -HoldDownTimer $BGPHoldDownTimer  -confirm:$false | out-null
+			
+			$rtg = Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting		
+			$rtg | Set-NsxEdgeBgp -GracefulRestart:$false -Confirm:$false | out-null
+			
+			#write-host -foregroundcolor Green "Configuring Floating Static Routes $PLR01Name"
+			
+			#Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRVNFStaticRoute -NextHop $DLR01ProtocolAddress -AdminDistance 240 -confirm:$false | out-null
+
+				if($PLRMode -eq "ECMP"){
+	 
+					write-host -foregroundcolor Green "Configuring $PLR02Name BGP"
+					$rtg = Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting
+					$rtg | Set-NsxEdgeRouting -EnableEcmp -EnableBgp -RouterId $PLR02UplinkAddress -LocalAS $iBGPAS -Confirm:$false | out-null
+					
+					$rtg = Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting
+					$rtg | New-NsxEdgeBgpNeighbour -IpAddress $DLR01ProtocolAddress -RemoteAS $iBGPAS -KeepAliveTimer $BGPKeepAliveTimer -HoldDownTimer $BGPHoldDownTimer  -confirm:$false | out-null
+					$rtg = Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting
+					$rtg | New-NsxEdgeBgpNeighbour -IpAddress $PLReBGPNeigbour1 -RemoteAS $eBGPAS -KeepAliveTimer $BGPKeepAliveTimer -HoldDownTimer $BGPHoldDownTimer  -confirm:$false | out-null
+								
+					$rtg = Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting
+					$rtg | Set-NsxEdgeBgp -GracefulRestart:$false -Confirm:$false | out-null
+					
+					#write-host -foregroundcolor Green "Configuring Floating Static Routes for $PLR02Name "
+					#Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRVNFStaticRoute -NextHop $DLR01ProtocolAddress -AdminDistance 250 -confirm:$false | out-null
+					
+				}
+			
+			write-host -foregroundcolor Green "Configuring DLR BGP"
+			
+				if($PLRMode -eq "ECMP"){
+				
+					Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | set-NsxLogicalRouterRouting -EnableEcmp -EnableBgp -RouterId $DLRUplinkAddress -LocalAS $iBGPAS -ProtocolAddress $DLR01ProtocolAddress -ForwardingAddress $DLRUplinkAddress -confirm:$false | out-null
+					Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | New-NsxLogicalRouterBgpNeighbour -IpAddress $PLR02InternalAddress -RemoteAS $iBGPAS -ProtocolAddress $DLR01ProtocolAddress -ForwardingAddress $DLRUplinkAddress  -KeepAliveTimer $BGPKeepAliveTimer -HoldDownTimer $BGPHoldDownTimer -confirm:$false | out-null
+					Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | New-NsxLogicalRouterBgpNeighbour -IpAddress $PLR01InternalAddress -RemoteAS $iBGPAS -ProtocolAddress $DLR01ProtocolAddress -ForwardingAddress $DLRUplinkAddress  -KeepAliveTimer $BGPKeepAliveTimer -HoldDownTimer $BGPHoldDownTimer -confirm:$false | out-null
+				}
+				else {
+					Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | set-NsxLogicalRouterRouting -EnableEcmp:$false -EnableBgp -RouterId $DLRUplinkAddress -LocalAS $iBGPAS -ProtocolAddress $DLR01ProtocolAddress -ForwardingAddress $DLRUplinkAddress -confirm:$false | out-null
+					Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | New-NsxLogicalRouterBgpNeighbour -IpAddress $PLR02InternalAddress -RemoteAS $iBGPAS -ProtocolAddress $DLR01ProtocolAddress -ForwardingAddress $DLRUplinkAddress  -KeepAliveTimer $BGPKeepAliveTimer -HoldDownTimer $BGPHoldDownTimer -confirm:$false | out-null
+				}
+			
+				
+			write-host -foregroundcolor Green "Configuring Route Redistribution"
+			Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | Set-NsxLogicalRouterRouting -EnableOspfRouteRedistribution:$false -confirm:$false | out-null
+			Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | Set-NsxLogicalRouterRouting -EnableBgpRouteRedistribution:$true -confirm:$false | out-null
+			Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | Get-NsxLogicalRouterRedistributionRule -Learner ospf | Remove-NsxLogicalRouterRedistributionRule -Confirm:$false | out-null
+			Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | New-NsxLogicalRouterRedistributionRule -Learner bgp -FromConnected -Action permit -confirm:$false | out-null
+			
+			Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -EnableOspfRouteRedistribution:$false -confirm:$false | out-null
+			Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -EnableBgpRouteRedistribution:$true -confirm:$false | out-null
+			Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting | Get-NsxEdgeRedistributionRule -Learner ospf | Remove-NsxEdgeRedistributionRule -Confirm:$false | out-null
+			Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting | New-NsxEdgeRedistributionRule -Learner bgp -FromConnected -FromStatic -Action permit -confirm:$false | out-null
+			
+				if($PLRMode -eq "ECMP"){
+					Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -EnableOspfRouteRedistribution:$false -confirm:$false | out-null
+					Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -EnableBgpRouteRedistribution:$true -confirm:$false | out-null
+					Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting | Get-NsxEdgeRedistributionRule -Learner ospf | Remove-NsxEdgeRedistributionRule -Confirm:$false | out-null
+					Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting | New-NsxEdgeRedistributionRule -Learner bgp -FromConnected -FromStatic -Action permit -confirm:$false | out-null
+				}
+			write-host -foregroundcolor Green "Disabling Graceful Restart"
+			$rtg = Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting
+			$rtg | Set-NsxLogicalRouterBgp -GracefulRestart:$false -confirm:$false | out-null
+	  
+		}
+		
+		write-host -foregroundcolor green "NSX $DeploymentIPModel VNF Configuration Complete" 
+		$EndTime = Get-Date
+		$duration = [math]::Round((New-TimeSpan -Start $StartTime -End $EndTime).TotalMinutes,2)
+		write-host "Duration: $duration minutes"
 	}
 	
-     write-host -foregroundcolor green "`nNSX VNF Configuration Complete`n" 
- 		
-	Disconnect-NsxServer
+	if($DeploymentIPModel -eq "IPv6"){	
+		# Creates logical switches 
+		
+		 write-host -foregroundcolor "Green" "Creating Logical Switches..." 
+	 
+			if (Get-NsxLogicalSwitch $VNFNetworkLsNameIPv6 ) {
+				$VNFNetworkLsIPv6 = Get-NsxLogicalSwitch $VNFNetworkLsNameIPv6    
+				write-host -foregroundcolor "Yellow" "	$VNFNetworkLsNameIPv6  is already exist..."			
+			}
+			else {
+				$VNFNetworkLsIPv6 = Get-NsxTransportZone -name $TransportZoneName | New-NsxLogicalSwitch $VNFNetworkLsNameIPv6 |out-null
+			}
+			if (Get-NsxLogicalSwitch $EdgeHALsNameIPv6) {
+			
+				$MgmtLs = Get-NsxLogicalSwitch $EdgeHALsNameIPv6   
+				write-host -foregroundcolor "Yellow" "	$EdgeHALsNameIPv6 is already exist..."				
+			}
+			else {
+				$MgmtLs = Get-NsxTransportZone -name $TransportZoneName | New-NsxLogicalSwitch $EdgeHALsNameIPv6 |out-null
+			}
+		
+		$Edge = Get-NsxEdge -name $PLRNameIPv6
+			
+			if(!$Edge) {
+			
+				## Defining the uplink and internal interfaces to be used when deploying the edge. Note there are two IP addresses on these interfaces. $EdgeInternalSecondaryAddress and $EdgeUplinkSecondaryAddress are the VIPs
+				$EdgeUplinkNetwork = get-vdportgroup $EdgeUplinkNetworkNameIPv6 -errorAction Stop
+				$edgevnic0 = New-NsxEdgeinterfacespec -index 0 -Name "Uplink" -type Uplink -ConnectedTo $EdgeUplinkNetwork -PrimaryAddress $PLRUplinkAddressIPv6 -SubnetPrefixLength $IPv6Prefix
+				$edgevnic1 = New-NsxEdgeinterfacespec -index 1 -Name $VNFNetworkLsNameIPv6 -type Internal -ConnectedTo $VNFNetworkLsIPv6 -PrimaryAddress $PLRInternalAddressIPv6 -SubnetPrefixLength $IPv6Prefix
+
+				## Deploy appliance with the defined uplinks
+				write-host -foregroundcolor "Green" "Creating Edge $PLRNameIPv6"
+
+				# Enable HA
+									
+			    $Edge = New-NsxEdge -name $PLRNameIPv6 -hostname $PLRNameIPv6 -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $AppliancePassword -FwEnabled:$false  -enablessh -enableHA 
+			
+				##Configure Default Gateway
+			
+				Get-NSXEdge -name $PLRNameIPv6 | Get-NsxEdgeRouting | Set-NsxEdgeRouting -DefaultGatewayAddress $PLRDefaultGWIPv6 -confirm:$false | out-null
+						
+				## Enable Syslog
+					if ($sysLogServer ) {
+				
+						write-host -foregroundcolor Green "Setting syslog server for $PLR01Name"
+						
+						$Edge1 = get-NSXEdge -name $PLR01Name
+						$Edge1Id=$Edge1.id
+							
+						$apistr="/api/4.0/edges/$Edge1Id/syslog/config"
+						$body="<syslog>
+						<enabled>true</enabled>
+						<protocol>udp</protocol>
+						<serverAddresses>
+						<ipAddress>$sysLogServer</ipAddress>
+						</serverAddresses>
+						</syslog>"
+
+						Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
+					}
+					
+			 }
+		
+		write-host -foregroundcolor green "NSX $DeploymentIPModel Configuration Complete" 
+		$EndTime = Get-Date
+		$duration = [math]::Round((New-TimeSpan -Start $StartTime -End $EndTime).TotalMinutes,2)
+		write-host "Duration: $duration minutes"
+	}
+Disconnect-VIServer $viConnection -Confirm:$false
+Disconnect-NsxServer
