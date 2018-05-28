@@ -20,13 +20,13 @@
 	
 #>
 
-$ScriptVersion = "1.1"
+$ScriptVersion = "1.2"
 $VNFPrefix = "VoLTE"
 $VNFDesc = "Nokia VoLTE"
 $VRFPrefix = "SIGTRAN1"
 
 # Deployment Parameters
-$DeploymentIPModel = "IPv4" # Select IPv4 or IPv6
+$DeploymentIPModel = "IPv6" # Select IPv4 or IPv6
 $DeploymentNSXModel = "Local" # Select Local or Universal
 $verboseLogFile = "ScriptLogs.log"
 
@@ -151,7 +151,7 @@ Write-Host -ForegroundColor magenta $banner
 		
 	 try {
 	 
-	 Write-Host "   -> Connecting NSX Manager..."
+	 My-Logger "-> Connecting NSX Manager..." "White" 
 	 
 		if(!(Connect-NSXServer -Server $NSXHostname -Username admin -Password $NSXUIPassword -DisableVIAutoConnect -WarningAction SilentlyContinue)) {
 			My-Logger "Unable to connect to NSX Manager, please check the deployment" "Red"
@@ -237,7 +237,7 @@ Write-Host -ForegroundColor magenta $banner
 					$LSName =$item[0]
 					$DLRLIFIP = $item[1]
 					$VNFLs = Get-NsxLogicalSwitch $LSName
-					$ldr | New-NsxLogicalRouterInterface -Name $LSName -Type internal -ConnectedTo $VNFLs -PrimaryAddress $DLRLIFIP -SubnetPrefixLength $DefaultSubnetBits
+					$ldr | New-NsxLogicalRouterInterface -Name $LSName -Type internal -ConnectedTo $VNFLs -PrimaryAddress $DLRLIFIP -SubnetPrefixLength $DefaultSubnetBits | out-null
 				}
 				
 				# Set DLR Password via XML Element
@@ -481,7 +481,7 @@ Write-Host -ForegroundColor magenta $banner
 	if($DeploymentIPModel -eq "IPv6"){	
 		# Creates logical switches 
 		
-		 write-host -foregroundcolor "Green" "Creating Logical Switches..." 
+		 My-Logger "Creating Logical Switches..." "Green"  
 	 
 			if (Get-NsxLogicalSwitch $VNFNetworkLsNameIPv6 ) {
 				$VNFNetworkLsIPv6 = Get-NsxLogicalSwitch $VNFNetworkLsNameIPv6    
