@@ -8,8 +8,9 @@
 	
 	- Create VNF Logical Switches
 	- Create DLR or UDLR based on selected option
-	- Create DLR LIF for VNF
-	- Create ESGs (HA or ECMP mode)
+	- Create DLR LIFs for VNFs
+	- Create ESGs for IPv4 networks (HA or ECMP mode)
+	- Create ESG for IPv6 networks
 	- Create Anti-affinity rules for ESGs (for ECMP mode)
 	- Configure routing based on ESG model(static or BGP)
 	- Configure route redistribution
@@ -25,7 +26,7 @@ $VNFDesc = "Nokia VoLTE"
 $VRFPrefix = "SIGTRAN1"
 
 # Deployment Parameters
-$DeploymentIPModel = "IPv6" # Select IPv4 or IPv6
+$DeploymentIPModel = "IPv4" # Select IPv4 or IPv6
 $DeploymentNSXModel = "Local" # Select Local or Universal
 $verboseLogFile = "ScriptLogs.log"
 
@@ -100,13 +101,15 @@ $WaitTimeout = 600
 Function My-Logger {
     param(
     [Parameter(Mandatory=$true)]
-    [String]$message
+    [String]$message,
+	[String]$color
+	
     )
-
+	
     $timeStamp = Get-Date -Format "MM-dd-yyyy_hh:mm:ss"
 
     Write-Host -NoNewline -ForegroundColor White "[$timestamp]"
-    Write-Host -ForegroundColor Green " $message"
+    Write-Host -ForegroundColor $color " $message"
     $logMessage = "[$timeStamp] $message"
     $logMessage | Out-File -Append -LiteralPath $verboseLogFile
 }
@@ -124,7 +127,7 @@ Write-Host -ForegroundColor magenta $banner
 
 	# Check PowerCli and PowerNSX modules
 
-	Write-Host -ForegroundColor Yellow "Checking PowerCli and PowerNSX Modules ..."
+	My-Logger "Checking PowerCli and PowerNSX Modules ..." "Yellow"
 	
 	$PSVersion=$PSVersionTable.PSVersion.Major
 	
@@ -142,7 +145,7 @@ Write-Host -ForegroundColor magenta $banner
 	Set-PowerCLIConfiguration -invalidcertificateaction Ignore -confirm:$false | out-null
 	Set-PowerCLIConfiguration -Scope Session -WebOperationTimeoutSeconds 3600 -confirm:$false | out-null
 	
-	Write-Host -ForegroundColor green "PowerCli and PowerNSX Modules check completed..."
+	My-Logger "PowerCli and PowerNSX Modules check completed..." "green"
 	
 	$viConnection = Connect-VIServer $VIServer -User $VIUsername -Password $VIPassword -WarningAction SilentlyContinue
 		
@@ -151,10 +154,10 @@ Write-Host -ForegroundColor magenta $banner
 	 Write-Host "   -> Connecting NSX Manager..."
 	 
 		if(!(Connect-NSXServer -Server $NSXHostname -Username admin -Password $NSXUIPassword -DisableVIAutoConnect -WarningAction SilentlyContinue)) {
-			Write-Host -ForegroundColor Red "Unable to connect to NSX Manager, please check the deployment"
+			My-Logger "Unable to connect to NSX Manager, please check the deployment" "Red"
 			exit
 		} else {
-			Write-Host "Successfully logged into NSX Manager $global:NSXHostname..."
+			My-Logger "Successfully logged into NSX Manager $NSXHostname" "white"			
 		}
 	
 	}
@@ -174,24 +177,23 @@ Write-Host -ForegroundColor magenta $banner
 		#Logical Switches 
 	 
 		# Creates logical switches 
-		
-		 write-host -foregroundcolor "Green" "Creating Logical Switches..." 
+	
+		 My-Logger "Creating Logical Switches..." "Green"
 	 
 			 foreach ($item in  $VNFExternalNetworks)  {
-				
 				$LSName =$item[0]
+					
 					if (Get-NsxLogicalSwitch $LSName) {
-						write-host -foregroundcolor "Yellow" "	$LSName is already exist..."			
+						My-Logger "$LSName is already exist..." "Yellow"
 					}
 					else {
 						Get-NsxTransportZone -name $TransportZoneName | New-NsxLogicalSwitch $LSName |out-null
 					}
-			   
 			}
 
 			if (Get-NsxLogicalSwitch $TransitLsName) {
 				$TransitLs = Get-NsxLogicalSwitch $TransitLsName   
-				write-host -foregroundcolor "Yellow" "	$TransitLsName is already exist..."			
+				My-Logger "$TransitLsName is already exist..." "Yellow"						
 			}
 			else {
 				$TransitLs = Get-NsxTransportZone -name $TransportZoneName | New-NsxLogicalSwitch $TransitLsName |out-null
@@ -199,7 +201,8 @@ Write-Host -ForegroundColor magenta $banner
 			if (Get-NsxLogicalSwitch $EdgeHALsName) {
 			
 				$MgmtLs = Get-NsxLogicalSwitch $EdgeHALsName   
-				write-host -foregroundcolor "Yellow" "	$EdgeHALsName is already exist..."				
+				My-Logger "$EdgeHALsName is already exist..." "Yellow"	
+							
 			}
 			else {
 				$MgmtLs = Get-NsxTransportZone -name $TransportZoneName | New-NsxLogicalSwitch $EdgeHALsName |out-null
@@ -215,18 +218,18 @@ Write-Host -ForegroundColor magenta $banner
 			if(!$Ldr){
 			
 				# DLR Appliance has the uplink router interface created first.
-				write-host -foregroundcolor "Green" "Creating DLR"
+				My-Logger "Creating DLR $DLRName" "Green"
 				$LdrvNic0 = New-NsxLogicalRouterInterfaceSpec -type Uplink -Name $TransitLsName -ConnectedTo $TransitLs -PrimaryAddress $DLRUplinkAddress -SubnetPrefixLength $DefaultSubnetBits
 			
 				# HA will be enabled			
 					
-				write-host -foregroundcolor "Green" "Enabling HA for $DLRName"
+				My-Logger "Enabling HA for $DLRName" "Green"
 				# The DLR is created with the first vnic defined, and the datastore and cluster on which the Control VM will be deployed.
 
 				$Ldr = New-NsxLogicalRouter -name $DLRName -interface $LdrvNic0 -ManagementPortGroup $MgmtLs  -Cluster $cluster -datastore $DataStore -EnableHA
 				
 				# Create DLR Internal Interfaces
-				write-host -foregroundcolor Green "Adding VNF LIF to DLR"
+				My-Logger "Adding VNF LIFs to DLR" "Green"
 				
 				$Ldr = Get-NsxLogicalRouter  -name $DLRName
 				foreach ($item in  $VNFExternalNetworks)  {
@@ -244,7 +247,7 @@ Write-Host -ForegroundColor magenta $banner
 				$ldr | Set-NsxLogicalRouter -confirm:$false | out-null
 				
 				# Change DLR Name
-				write-host -foregroundcolor Green "DLR Hostname is setting ..."
+				My-Logger "DLR Hostname is setting ..." "Green"
 				$Ldr = Get-NsxLogicalRouter  -name $DLRName
 				$Ldr.fqdn="$DLRName"
 				$ldr | Set-NsxLogicalRouter -confirm:$false | out-null
@@ -253,7 +256,7 @@ Write-Host -ForegroundColor magenta $banner
 				
 					if ($sysLogServer) {
 					
-						write-host -foregroundcolor Green "Setting Syslog server for $DLRName"
+						My-Logger "Setting Syslog server for $DLRName" "Green"
 						$Ldr = get-nsxlogicalrouter $DLRName
 						$LdrID = $Ldr.id
 							
@@ -270,6 +273,7 @@ Write-Host -ForegroundColor magenta $banner
 					}
 					
 				## Disable DLR firewall
+				My-Logger "Disabling DLR Firewall..." "Green"
 				$Ldr = get-nsxlogicalrouter $DLRName
 				$Ldr.features.firewall.enabled = "false"
 				$Ldr | Set-nsxlogicalrouter -confirm:$false | out-null
@@ -290,7 +294,7 @@ Write-Host -ForegroundColor magenta $banner
 				$edgevnic1 = New-NsxEdgeinterfacespec -index 1 -Name $TransitLsName -type Internal -ConnectedTo $TransitLs -PrimaryAddress $PLR01InternalAddress -SubnetPrefixLength $DefaultSubnetBits
 
 				## Deploy appliance with the defined uplinks
-				write-host -foregroundcolor "Green" "Creating Edge $PLR01Name"
+				My-Logger "Creating Edge $PLR01Name" "Green"
 
 				# If Prod deployment disable esg firewall
 				
@@ -317,7 +321,7 @@ Write-Host -ForegroundColor magenta $banner
 				## Enable Syslog
 					if ($sysLogServer ) {
 				
-						write-host -foregroundcolor Green "Setting syslog server for $PLR01Name"
+						My-Logger "Setting syslog server for $PLR01Name" "Green"
 						
 						$Edge1 = get-NSXEdge -name $PLR01Name
 						$Edge1Id=$Edge1.id
@@ -347,7 +351,7 @@ Write-Host -ForegroundColor magenta $banner
 					$edgevnic1 = New-NsxEdgeinterfacespec -index 1 -Name $TransitLsName -type Internal -ConnectedTo $TransitLs -PrimaryAddress $PLR02InternalAddress -SubnetPrefixLength $DefaultSubnetBits
 			
 					## Deploy appliance with the defined uplinks
-					write-host -foregroundcolor "Green" "Creating Edge $PLR02Name"
+					My-Logger "Creating Edge $PLR02Name" "Green" 
 					$Edge2 = New-NsxEdge -name $PLR02Name -hostname $PLR02Name -cluster $Cluster -datastore $DataStore -Interface $edgevnic0, $edgevnic1 -Password $AppliancePassword -FwEnabled:$false -enablessh
 					
 					# Disabling Reverse Path Forwarding (RPF) for $PLR02Name  ...
@@ -366,7 +370,7 @@ Write-Host -ForegroundColor magenta $banner
 					## Enable Syslog
 						if ($sysLogServer ) {
 				
-							write-host -foregroundcolor Green "Setting syslog server for $PLR02Name"
+							My-Logger "Setting syslog server for $PLR02Name" "Green"
 							$Edge2 = Get-NSXEdge -name $PLR02Name
 							$Edge2Id=$Edge2.id
 								
@@ -382,7 +386,7 @@ Write-Host -ForegroundColor magenta $banner
 							Invoke-NsxRestMethod  -Method put -Uri $apistr -body $body | out-null
 						}
 						
-				write-host "Creating Anti Affinity Rules for PLRs"
+				My-Logger "Creating Anti Affinity Rules for PLRs" "Green"
 				$antiAffinityVMs=Get-VM | Where {$_.name -like "$PLR01Name*" -or $_.name -like "$PLR02Name*"}
 				New-DrsRule -Cluster $VMCluster -Name SeperatePLRs -KeepTogether $false -VM $antiAffinityVMs | out-null
 			 }
@@ -396,7 +400,7 @@ Write-Host -ForegroundColor magenta $banner
 			#$s = $VNFPrimaryAddress.split(".")
 			#$DLRVNFStaticRoute = $s[0]+"."+$s[1]+"."+$s[2]+".0/"+$DefaultSubnetBits
 		
-			write-host -foregroundcolor Green "Configuring $PLR01Name BGP"		
+			My-Logger "Configuring BGP on $PLR01Name" "green"		
 			$rtg = Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting
 			$rtg | Set-NsxEdgeRouting -EnableEcmp -EnableBgp -RouterId $PLR01UplinkAddress -LocalAS $iBGPAS -Confirm:$false | out-null
 
@@ -414,7 +418,7 @@ Write-Host -ForegroundColor magenta $banner
 
 				if($PLRMode -eq "ECMP"){
 	 
-					write-host -foregroundcolor Green "Configuring $PLR02Name BGP"
+					My-Logger "Configuring $PLR02Name BGP" "green"
 					$rtg = Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting
 					$rtg | Set-NsxEdgeRouting -EnableEcmp -EnableBgp -RouterId $PLR02UplinkAddress -LocalAS $iBGPAS -Confirm:$false | out-null
 					
@@ -431,7 +435,7 @@ Write-Host -ForegroundColor magenta $banner
 					
 				}
 			
-			write-host -foregroundcolor Green "Configuring DLR BGP"
+			My-Logger "Configuring BGP on DLR" "green"
 			
 				if($PLRMode -eq "ECMP"){
 				
@@ -445,7 +449,7 @@ Write-Host -ForegroundColor magenta $banner
 				}
 			
 				
-			write-host -foregroundcolor Green "Configuring Route Redistribution"
+			My-Logger "Configuring Route Redistribution" "green"
 			Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | Set-NsxLogicalRouterRouting -EnableOspfRouteRedistribution:$false -confirm:$false | out-null
 			Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | Set-NsxLogicalRouterRouting -EnableBgpRouteRedistribution:$true -confirm:$false | out-null
 			Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting | Get-NsxLogicalRouterRedistributionRule -Learner ospf | Remove-NsxLogicalRouterRedistributionRule -Confirm:$false | out-null
@@ -462,13 +466,13 @@ Write-Host -ForegroundColor magenta $banner
 					Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting | Get-NsxEdgeRedistributionRule -Learner ospf | Remove-NsxEdgeRedistributionRule -Confirm:$false | out-null
 					Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting | New-NsxEdgeRedistributionRule -Learner bgp -FromConnected -FromStatic -Action permit -confirm:$false | out-null
 				}
-			write-host -foregroundcolor Green "Disabling Graceful Restart"
+			My-Logger "Disabling Graceful Restart" "green"
 			$rtg = Get-NsxLogicalRouter $DLRName | Get-NsxLogicalRouterRouting
 			$rtg | Set-NsxLogicalRouterBgp -GracefulRestart:$false -confirm:$false | out-null
 	  
 		}
 		
-		write-host -foregroundcolor green "NSX $DeploymentIPModel VNF Configuration Complete" 
+		My-Logger "NSX $DeploymentIPModel VNF Configuration Complete" "white"
 		$EndTime = Get-Date
 		$duration = [math]::Round((New-TimeSpan -Start $StartTime -End $EndTime).TotalMinutes,2)
 		write-host "Duration: $duration minutes"
@@ -481,7 +485,7 @@ Write-Host -ForegroundColor magenta $banner
 	 
 			if (Get-NsxLogicalSwitch $VNFNetworkLsNameIPv6 ) {
 				$VNFNetworkLsIPv6 = Get-NsxLogicalSwitch $VNFNetworkLsNameIPv6    
-				write-host -foregroundcolor "Yellow" "	$VNFNetworkLsNameIPv6  is already exist..."			
+				My-Logger "$VNFNetworkLsNameIPv6  is already exist..." "Yellow" 			
 			}
 			else {
 				$VNFNetworkLsIPv6 = Get-NsxTransportZone -name $TransportZoneName | New-NsxLogicalSwitch $VNFNetworkLsNameIPv6 |out-null
@@ -489,7 +493,7 @@ Write-Host -ForegroundColor magenta $banner
 			if (Get-NsxLogicalSwitch $EdgeHALsNameIPv6) {
 			
 				$MgmtLs = Get-NsxLogicalSwitch $EdgeHALsNameIPv6   
-				write-host -foregroundcolor "Yellow" "	$EdgeHALsNameIPv6 is already exist..."				
+				My-Logger "$EdgeHALsNameIPv6 is already exist..." "Yellow" 			
 			}
 			else {
 				$MgmtLs = Get-NsxTransportZone -name $TransportZoneName | New-NsxLogicalSwitch $EdgeHALsNameIPv6 |out-null
@@ -505,7 +509,7 @@ Write-Host -ForegroundColor magenta $banner
 				$edgevnic1 = New-NsxEdgeinterfacespec -index 1 -Name $VNFNetworkLsNameIPv6 -type Internal -ConnectedTo $VNFNetworkLsIPv6 -PrimaryAddress $PLRInternalAddressIPv6 -SubnetPrefixLength $IPv6Prefix
 
 				## Deploy appliance with the defined uplinks
-				write-host -foregroundcolor "Green" "Creating Edge $PLRNameIPv6"
+				My-Logger "Creating Edge $PLRNameIPv6" "Green" 
 
 				# Enable HA
 									
@@ -518,7 +522,7 @@ Write-Host -ForegroundColor magenta $banner
 				## Enable Syslog
 					if ($sysLogServer ) {
 				
-						write-host -foregroundcolor Green "Setting syslog server for $PLR01Name"
+						My-Logger "Setting syslog server for $PLR01Name" "Green" 
 						
 						$Edge1 = get-NSXEdge -name $PLR01Name
 						$Edge1Id=$Edge1.id
@@ -537,7 +541,7 @@ Write-Host -ForegroundColor magenta $banner
 					
 			 }
 		
-		write-host -foregroundcolor green "NSX $DeploymentIPModel Configuration Complete" 
+		My-Logger "NSX $DeploymentIPModel Configuration Complete" "White"  
 		$EndTime = Get-Date
 		$duration = [math]::Round((New-TimeSpan -Start $StartTime -End $EndTime).TotalMinutes,2)
 		write-host "Duration: $duration minutes"
