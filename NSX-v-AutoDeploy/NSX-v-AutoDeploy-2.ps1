@@ -36,7 +36,7 @@
 	
 #>
 
-$ScriptVersion = "1.4"
+$ScriptVersion = "1.5"
 $global:DeploymentType = "Prod" # Select Prod or Test
 $global:deploy3ta=$true
 
@@ -923,12 +923,12 @@ Function ConfigureNSXManager {
 		$s = $global:DLRDBPrimaryAddress.split(".")
 		$DLRDBStaticRoute = $s[0]+"."+$s[1]+"."+$s[2]+".0/"+$global:DefaultSubnetBits
 		
-		Get-NsxEdge $global:PLR01Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRWebStaticRoute -NextHop $global:DLR01ProtocolAddress -AdminDistance 250 -confirm:$false | out-null
-		Get-NsxEdge $global:PLR01Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRAppStaticRoute -NextHop $global:DLR01ProtocolAddress -AdminDistance 250 -confirm:$false | out-null
-		Get-NsxEdge $global:PLR01Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRDBStaticRoute -NextHop $global:DLR01ProtocolAddress -AdminDistance 250 -confirm:$false | out-null
-		Get-NsxEdge $global:PLR02Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRWebStaticRoute -NextHop $global:DLR01ProtocolAddress -AdminDistance 250 -confirm:$false | out-null
-		Get-NsxEdge $global:PLR02Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRAppStaticRoute -NextHop $global:DLR01ProtocolAddress -AdminDistance 250 -confirm:$false | out-null
-		Get-NsxEdge $global:PLR02Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRDBStaticRoute -NextHop $global:DLR01ProtocolAddress -AdminDistance 250 -confirm:$false | out-null
+		Get-NsxEdge $global:PLR01Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRWebStaticRoute -NextHop $global:DLRUplinkAddress -AdminDistance 250 -confirm:$false | out-null
+		Get-NsxEdge $global:PLR01Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRAppStaticRoute -NextHop $global:DLRUplinkAddress -AdminDistance 250 -confirm:$false | out-null
+		Get-NsxEdge $global:PLR01Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRDBStaticRoute -NextHop $global:DLRUplinkAddress -AdminDistance 250 -confirm:$false | out-null
+		Get-NsxEdge $global:PLR02Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRWebStaticRoute -NextHop $global:DLRUplinkAddress -AdminDistance 250 -confirm:$false | out-null
+		Get-NsxEdge $global:PLR02Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRAppStaticRoute -NextHop $global:DLRUplinkAddress -AdminDistance 250 -confirm:$false | out-null
+		Get-NsxEdge $global:PLR02Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRDBStaticRoute -NextHop $global:DLRUplinkAddress -AdminDistance 250 -confirm:$false | out-null
   	  	
 		write-host -foregroundcolor Green "Configuring DLR BGP"
 		Get-NsxLogicalRouter $global:DLRName | Get-NsxLogicalRouterRouting | set-NsxLogicalRouterRouting -EnableEcmp -EnableBgp -RouterId $global:DLRUplinkAddress -LocalAS $iBGPAS -ProtocolAddress $global:DLR01ProtocolAddress -ForwardingAddress $global:DLRUplinkAddress -confirm:$false | out-null
