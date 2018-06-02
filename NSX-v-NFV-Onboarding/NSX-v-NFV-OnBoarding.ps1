@@ -410,14 +410,13 @@ Write-Host -ForegroundColor magenta $banner
 			$rtg = Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting		
 			$rtg | Set-NsxEdgeBgp -GracefulRestart:$false -Confirm:$false | out-null
 			
-			My-Logger "Configuring Floating Static Routes $PLR01Name" "green"
-			
+			My-Logger "Configuring $PLR01Name floating static routes" "green"
 				foreach ($item in  $VNFExternalNetworks)  {
 					
 						$DLRLIFIP = $item[1]
 						$s = $DLRLIFIP.split(".")
 						$DLRVNFStaticRoute = $s[0]+"."+$s[1]+"."+$s[2]+".0/"+$DefaultSubnetBits
-						Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRVNFStaticRoute -NextHop $DLR01ProtocolAddress -AdminDistance 240 -confirm:$false | out-null
+						Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRVNFStaticRoute -NextHop $DLRUplinkAddress -AdminDistance 240 -confirm:$false | out-null
 				}
 				
 				if($PLRMode -eq "ECMP"){
@@ -439,7 +438,7 @@ Write-Host -ForegroundColor magenta $banner
 							$DLRLIFIP = $item[1]
 							$s = $DLRLIFIP.split(".")
 							$DLRVNFStaticRoute = $s[0]+"."+$s[1]+"."+$s[2]+".0/"+$DefaultSubnetBits
-							Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRVNFStaticRoute -NextHop $DLR01ProtocolAddress -AdminDistance 240 -confirm:$false | out-null
+							Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRVNFStaticRoute -NextHop $DLRUplinkAddress -AdminDistance 240 -confirm:$false | out-null
 						}
 										
 				}
