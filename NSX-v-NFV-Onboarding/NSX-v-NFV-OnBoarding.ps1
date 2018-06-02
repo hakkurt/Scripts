@@ -16,6 +16,7 @@
 	- Configure route redistribution
 	- Configure floating static routes on ESGs
 	- Enable ECMP, Disable Graceful Restart and RFP
+	- Disable firewall on ECMP enabled ESGs and DLR
 	- Set Syslog for all components
 	
 #>
@@ -26,7 +27,7 @@ $VNFDesc = "Nokia VoLTE"
 $VRFPrefix = "SIGTRAN1"
 
 # Deployment Parameters
-$DeploymentIPModel = "IPv6" # Select IPv4 or IPv6
+$DeploymentIPModel = "IPv4" # Select IPv4 or IPv6
 $DeploymentNSXModel = "Local" # Select Local or Universal
 $verboseLogFile = "ScriptLogs.log"
 
@@ -397,9 +398,6 @@ Write-Host -ForegroundColor magenta $banner
 
 		if($RoutingProtocol -eq "BGP"){    
 		
-			#$s = $VNFPrimaryAddress.split(".")
-			#$DLRVNFStaticRoute = $s[0]+"."+$s[1]+"."+$s[2]+".0/"+$DefaultSubnetBits
-		
 			My-Logger "Configuring BGP on $PLR01Name" "green"		
 			$rtg = Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting
 			$rtg | Set-NsxEdgeRouting -EnableEcmp -EnableBgp -RouterId $PLR01UplinkAddress -LocalAS $iBGPAS -Confirm:$false | out-null
@@ -412,10 +410,16 @@ Write-Host -ForegroundColor magenta $banner
 			$rtg = Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting		
 			$rtg | Set-NsxEdgeBgp -GracefulRestart:$false -Confirm:$false | out-null
 			
-			#write-host -foregroundcolor Green "Configuring Floating Static Routes $PLR01Name"
+			My-Logger "Configuring Floating Static Routes $PLR01Name" "green"
 			
-			#Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRVNFStaticRoute -NextHop $DLR01ProtocolAddress -AdminDistance 240 -confirm:$false | out-null
-
+				foreach ($item in  $VNFExternalNetworks)  {
+					
+						$DLRLIFIP = $item[1]
+						$s = $DLRLIFIP.split(".")
+						$DLRVNFStaticRoute = $s[0]+"."+$s[1]+"."+$s[2]+".0/"+$DefaultSubnetBits
+						Get-NsxEdge $PLR01Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRVNFStaticRoute -NextHop $DLR01ProtocolAddress -AdminDistance 240 -confirm:$false | out-null
+				}
+				
 				if($PLRMode -eq "ECMP"){
 	 
 					My-Logger "Configuring $PLR02Name BGP" "green"
@@ -430,9 +434,14 @@ Write-Host -ForegroundColor magenta $banner
 					$rtg = Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting
 					$rtg | Set-NsxEdgeBgp -GracefulRestart:$false -Confirm:$false | out-null
 					
-					#write-host -foregroundcolor Green "Configuring Floating Static Routes for $PLR02Name "
-					#Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRVNFStaticRoute -NextHop $DLR01ProtocolAddress -AdminDistance 250 -confirm:$false | out-null
-					
+					My-Logger "Configuring $PLR02Name floating static routes" "green"
+						foreach ($item in  $VNFExternalNetworks)  {
+							$DLRLIFIP = $item[1]
+							$s = $DLRLIFIP.split(".")
+							$DLRVNFStaticRoute = $s[0]+"."+$s[1]+"."+$s[2]+".0/"+$DefaultSubnetBits
+							Get-NsxEdge $PLR02Name | Get-NsxEdgeRouting | New-NsxEdgeStaticRoute -Network $DLRVNFStaticRoute -NextHop $DLR01ProtocolAddress -AdminDistance 240 -confirm:$false | out-null
+						}
+										
 				}
 			
 			My-Logger "Configuring BGP on DLR" "green"
@@ -524,7 +533,7 @@ Write-Host -ForegroundColor magenta $banner
 				
 						My-Logger "Setting syslog server for $PLR01Name" "Green" 
 						
-						$Edge1 = get-NSXEdge -name $PLR01Name
+						$Edge1 = get-NSXEdge -name $PLRNameIPv6
 						$Edge1Id=$Edge1.id
 							
 						$apistr="/api/4.0/edges/$Edge1Id/syslog/config"
