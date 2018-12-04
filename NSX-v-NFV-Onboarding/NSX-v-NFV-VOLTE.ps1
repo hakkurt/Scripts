@@ -1,24 +1,24 @@
 <# 
-    NSX-v Deployment for voLTE Onboarding
-	Created by Hakan Akkurt
-	https://www.linkedin.com/in/hakkurt/
-	December 2018
+NSX-v Deployment for voLTE Onboarding
+Created by Hakan Akkurt
+https://www.linkedin.com/in/hakkurt/
+December 2018
     	
-	Script Functionalities
-	
-	- Create VDS portgroups for ESG Uplink interfaces
-	- Configure VDS portgroup(LACP and teaming)
-	- Create VNF Logical Switches
-	- Create UDLR 
-	- Create UDLR LIFs for VNFs
-	- Create ESGs for IPv4 networks
-	- Create Anti-affinity rules for ESGs 
-	- Configure routing on ESG and UDLR(BGP)
-	- Configure route redistribution
-	- Configure floating static routes on ESGs
-	- Enable ECMP, Disable Graceful Restart and RFP
-	- Disable firewall on ECMP enabled ESGs and DLR
-	- Set Syslog for all components
+Script Functionalities
+
+- Create VDS portgroups for ESG Uplink interfaces
+- Configure VDS portgroup(LACP and teaming)
+- Create VNF Logical Switches
+- Create UDLR 
+- Create UDLR LIFs for VNFs
+- Create ESGs for IPv4 networks
+- Create Anti-affinity rules for ESGs 
+- Configure routing on ESG and UDLR(BGP)
+- Configure route redistribution
+- Configure floating static routes on ESGs
+- Enable ECMP, Disable Graceful Restart and RFP
+- Disable firewall on ECMP enabled ESGs and DLR
+- Set Syslog for all components
 #>
 
 $ScriptVersion = "1.3"
@@ -129,8 +129,8 @@ $verboseLogFile = "ScriptLogs.log"
 	}  
 	
 	Function BuildNSXforVNF {
-    param(
-    [String]$VRFName,
+  	param(
+   	[String]$VRFName,
 	[String]$ESG1UplinkVLAN,
 	[String]$ESG1UplinkAddress,
 	[String]$ESG1DownlinkAddress,
@@ -145,8 +145,7 @@ $verboseLogFile = "ScriptLogs.log"
 	[String]$DLRProtocolIPAddress,
 	[String]$EdgeDatastore,
 	[collections.arraylist]$VNFExternalNetworks
-		
-    )
+	)
 		$ESGDataStore = Get-Datastore -Name $EdgeDatastore -errorAction Stop
 		$DLRDataStore = Get-Datastore -Name $global:DLRDatastore -errorAction Stop
 		$DLRCluster = Get-Cluster -Name $global:DLRCluster -errorAction Stop
