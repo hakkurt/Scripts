@@ -21,40 +21,36 @@
 	- Set Syslog for all components
 #>
 
-$ScriptVersion = "1.4"
+$ScriptVersion = "1.5"
 $global:DCPrefix = "DC1"
 $global:VNFPrefix = "VOLTE"
 
 # vCenter Configuration
-$VIServer = "vcsa-01a.corp.local"
-$PSCServer = "vcsa-01a.corp.local"
-$VIUsername = "administrator@vsphere.local"
-$VIPassword = "VMware1!"
+$VIServer = "DC1vc003.corp.local"
+$PSCServer = "DC1vc002.corp.local"
 
 # NSX Configuration
-$NSXHostname = "nsxmgr-01a.corp.local"
-$NSXUIPassword = "VMware1!"
-
-$global:EdgeDatastore1 = "RegionA01-ISCSI01-COMP01"
-$global:EdgeDatastore2 = "RegionA01-ISCSI01-COMP01"
-$global:EdgeDatastore3 = "RegionA01-ISCSI01-COMP01"
-$global:EdgeCluster = "RegionA01-MGMT01"
-$global:EdgeVDS = "RegionA01-vDS-MGMT"
+$NSXHostname = "10.10.12.2"
+$global:EdgeDatastore1 = "DC1_Edge_Cluster_1_DS01"
+$global:EdgeDatastore2 = "DC1_Edge_Cluster_1_DS02"
+$global:EdgeDatastore3 = "DC1_Edge_Cluster_1_DS03"
+$global:EdgeCluster = "DC1_Edge_Cluster_1"
+$global:EdgeVDS = "DC1_Edge_Datacenter_VDS_3"
 $global:ESGDefaultSubnetBits = "29" 
-$global:ESGFormFactor = "compact" # use xlarge for Prod
+$global:ESGFormFactor = "quadlarge" # use quadlarge for Prod
 
-$global:DLRDatastore = "RegionA01-ISCSI01-COMP01"
-$global:DLRCluster = "RegionA01-MGMT01"
-$global:TransportZoneName = "UTZ"
+$global:DLRDatastoreCluster= "DC1-TST_Cluster_1_DSC01"
+$global:DLRCluster = "DC1-TST_Cluster_1"
+$global:TransportZoneName = "DC1_RES_UTZ"
 $global:DLRDefaultSubnetBits = "28" 
 
 $global:AppliancePassword = "VMware1!VMware1!"
-$global:iBGPAS = "65033" 
-$global:eBGPAS = "64700"
+$global:iBGPAS = "65705" 
+$global:eBGPAS = "65800"
 $global:BGPKeepAliveTimer = "1"
 $global:BGPHoldDownTimer = "3"
 
-$global:sysLogServer = "192.168.1.165"
+$global:sysLogServer = "10.20.116.142"
 $global:sysLogServerPort = "514"
 
 # Static Deployment Parameters
@@ -88,13 +84,13 @@ $verboseLogFile = "ScriptLogs.log"
 	Write-Host -ForegroundColor magenta "Starting NSX VNF Deploy Script version $ScriptVersion"
 
 	# Check PowerCli and PowerNSX modules
-
+	
 	My-Logger "Checking PowerCli and PowerNSX Modules ..." "Yellow"
 	
 	$PSVersion=$PSVersionTable.PSVersion.Major
 	
 	# If you manually install PowerCLI and PowerNSX, you can remove this part
-	if($PSVersion -le 4) {
+	 if($PSVersion -le 4) {
 		Write-Host -ForegroundColor red "You're using older version of Powershell. Please upgrade your Powershell from following URL :"
 		Write-Host -ForegroundColor red "https://www.microsoft.com/en-us/download/details.aspx?id=54616"
 		exit
@@ -102,12 +98,20 @@ $verboseLogFile = "ScriptLogs.log"
 	
 	Find-Module VMware.PowerCLI | Install-Module -Scope CurrentUser -Confirm:$False
 	Find-Module PowerNSX | Install-Module -Scope CurrentUser -Confirm:$False
-
+ 
 	Set-PowerCLIConfiguration -Scope User -ParticipateInCEIP $false -confirm:$false | out-null
 	Set-PowerCLIConfiguration -invalidcertificateaction Ignore -confirm:$false | out-null
 	Set-PowerCLIConfiguration -Scope Session -WebOperationTimeoutSeconds 3600 -confirm:$false | out-null
 	
-	My-Logger "PowerCli and PowerNSX Modules check completed..." "green"
+	My-Logger "PowerCli and PowerNSX Modules check completed..." "green" #>
+	
+	$VIUsername = Read-Host -Prompt 'Please enter vCenter user name'
+	$VIPassword = Read-Host -Prompt 'Please enter vCenter password' -AsSecureString
+	$NSXUIPassword = Read-Host -Prompt 'Please enter NSX Manager password' -AsSecureString
+	
+	
+	$VIPassword=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($VIPassword))
+	$NSXUIPassword=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($NSXUIPassword))
 	
 	$viConnection = Connect-VIServer $VIServer -User $VIUsername -Password $VIPassword -WarningAction SilentlyContinue
 		
@@ -148,7 +152,8 @@ $verboseLogFile = "ScriptLogs.log"
 		
     )
 		$ESGDataStore = Get-Datastore -Name $EdgeDatastore -errorAction Stop
-		$DLRDataStore = Get-Datastore -Name $global:DLRDatastore -errorAction Stop
+		$DLRDataStoreCluster = Get-DatastoreCluster -Name $global:DLRDatastoreCluster -errorAction Stop
+		$DLRDataStore = Get-Datastore -location $DLRDataStoreCluster | Get-Random -errorAction Stop
 		$DLRCluster = Get-Cluster -Name $global:DLRCluster -errorAction Stop
 		$ESGCluster = Get-Cluster -Name $global:EdgeCluster -errorAction Stop
 		
@@ -165,10 +170,10 @@ $verboseLogFile = "ScriptLogs.log"
 		$ESG1UplinkName = $global:DCPrefix+"_ESG_"+$global:VNFPrefix+"_"+$VRFName+"_1_ACI"
 		$ESG2UplinkName = $global:DCPrefix+"_ESG_"+$global:VNFPrefix+"_"+$VRFName+"_2_ACI"
 		
-		$activePortsList = "Uplink 3"
-		$UnusedUplinkPort = "Uplink 1", "Uplink 2"
+		$activePortsList = "Uplink 1" # Should be LACP
+		$UnusedUplinkPort = "Uplink 2" # Should be "Uplink 1", "Uplink 2"
 		
-		My-Logger "--- Deployment and configuration of NSX Environment for $VRFName is started --- " "Blue"
+		My-Logger "--- Deployment and configuration of NSX Environment for $VRFName is started --- " "Yellow"
 		
 		My-Logger "Creating VDS Port groups for ESG uplinks ..." "Green"
 
@@ -179,7 +184,7 @@ $verboseLogFile = "ScriptLogs.log"
 			else {
 				$ESG1Uplink = Get-VDSwitch -Name $global:EdgeVDS | New-VDPortgroup -Name $ESG1UplinkName -VLanId $ESG1UplinkVLAN 
 				My-Logger "Setting Teaming for $ESG1UplinkName ..." "Green"
-				Get-VDSwitch $global:EdgeVDS | Get-VDPortgroup $ESG1UplinkName | Get-VDUplinkTeamingPolicy | Set-VDUplinkTeamingPolicy -ActiveUplinkPort $activePortsList -UnusedUplinkPort $UnusedUplinkPort |out-null
+				Get-VDSwitch $global:EdgeVDS | Get-VDPortgroup $ESG1UplinkName | Get-VDUplinkTeamingPolicy | Set-VDUplinkTeamingPolicy -ActiveUplinkPort $activePortsList -UnusedUplinkPort $UnusedUplinkPort -LoadBalancingPolicy  "LoadBalanceIP"  | out-null
 			}
 				
 			if (Get-VDPortGroup -Name $ESG2UplinkName -VDSwitch $global:EdgeVDS -ErrorAction SilentlyContinue) {
@@ -505,42 +510,33 @@ $verboseLogFile = "ScriptLogs.log"
 	
 	# Create OUM Topology 
 	$VRFName="OUM"
-	$ESG1UplinkVLAN="1750"
-	$ESG1UplinkAddress= "192.168.54.6"
-	$ESG1DownlinkAddress="192.168.54.17"
-	$ESG1NeighborIPAddress1="192.168.54.1"
-	$ESG1NeighborIPAddress2="192.168.54.2"
-	$ESG2UplinkVLAN="1751"
-	$ESG2UplinkAddress="192.168.54.14"
-	$ESG2DownlinkAddress="192.168.54.18"
-	$ESG2NeighborIPAddress1="192.168.54.9"
-	$ESG2NeighborIPAddress2="192.168.54.10"
-	$DLRForwardingIPAddress="192.168.54.29"
-	$DLRProtocolIPAddress="192.168.54.30"
-	$EdgeDatastore =$global:EdgeDatastore1
-	$VNFExternalNetworks = @(("DC1_DLE_VOLTE_OUM_TAS-1","192.168.56.1","28"),("DC1_DLE_VOLTE_OUM_TAS-2","192.168.56.17","28"),("DC1_DLE_VOLTE_OUM_CFX-1","192.168.56.33","28"),("DC1_DLE_VOLTE_OUM_CFX-2","192.168.56.49","28"),("DC1_DLE_VOLTE_OUM_EIMS","192.168.56.161","28"),("DC1_DLE_VOLTE_OUM_CMREPO","192.168.56.177","28"),("DC1_DLE_VOLTE_OUM_ASBC-1","192.168.56.65","28"),("DC1_DLE_VOLTE_OUM_ASBC-2","192.168.56.81","28"),("DC1_DLE_VOLTE_OUM_ENUM-2","192.168.57.254","29"))
+	$ESG1UplinkVLAN="3412"
+	$ESG1UplinkAddress= "172.29.179.6"
+	$ESG1DownlinkAddress="172.29.179.17"
+	$ESG1NeighborIPAddress1="172.29.179.1"
+	$ESG1NeighborIPAddress2="172.29.179.2"
+	$ESG2UplinkVLAN="3413"
+	$ESG2UplinkAddress="172.29.179.14"
+	$ESG2DownlinkAddress="172.29.179.18"
+	$ESG2NeighborIPAddress1="172.29.179.9"
+	$ESG2NeighborIPAddress2="172.29.179.10"
+	$DLRForwardingIPAddress="172.29.179.29"
+	$DLRProtocolIPAddress="172.29.179.30"
+	$EdgeDatastore =$global:EdgeDatastore2
+	$VNFExternalNetworks = @(("DC1_DLE_VOLTE_OUM_TAS-1","172.29.186.1","28"),
+	("DC1_DLE_VOLTE_OUM_TAS-2","172.29.186.17","28"),
+	("DC1_DLE_VOLTE_OUM_TAS-3","172.29.186.33","28"),
+	("DC1_DLE_VOLTE_OUM_CFX-1","172.29.186.49","28"),
+	("DC1_DLE_VOLTE_OUM_CFX-2","172.29.186.65","28"),
+	("DC1_DLE_VOLTE_OUM_EIMS","172.29.186.97","28"),
+	("DC1_DLE_VOLTE_OUM_CMREPO","172.29.186.81","29"),
+	("DC1_DLE_VOLTE_OUM_ASBC-1","172.29.186.113","28"),
+	("DC1_DLE_VOLTE_OUM_ASBC-2","172.29.186.129","28"),
+	("DC1_DLE_VOLTE_OUM_ASBC-3","172.29.186.145","28"))
+	
 	
 	BuildNSXforVNF $VRFName $ESG1UplinkVLAN $ESG1UplinkAddress $ESG1DownlinkAddress $ESG1NeighborIPAddress1	$ESG1NeighborIPAddress2 $ESG2UplinkVLAN $ESG2UplinkAddress 	$ESG2DownlinkAddress $ESG2NeighborIPAddress1 $ESG2NeighborIPAddress2 $DLRForwardingIPAddress $DLRProtocolIPAddress $EdgeDatastore $VNFExternalNetworks	
-	
-	# Create LIN Topology 
-	$VRFName="LIN"
-	$ESG1UplinkVLAN="1752"
-	$ESG1UplinkAddress= "192.168.54.6"
-	$ESG1DownlinkAddress="192.168.54.17"
-	$ESG1NeighborIPAddress1="192.168.54.1"
-	$ESG1NeighborIPAddress2="192.168.54.2"
-	$ESG2UplinkVLAN="1753"
-	$ESG2UplinkAddress="192.168.54.14"
-	$ESG2DownlinkAddress="192.168.54.18"
-	$ESG2NeighborIPAddress1="192.168.54.9"
-	$ESG2NeighborIPAddress2="192.168.54.10"
-	$DLRForwardingIPAddress="192.168.54.29"
-	$DLRProtocolIPAddress="192.168.54.30"
-	$EdgeDatastore =$global:EdgeDatastore1
-	$VNFExternalNetworks = @(("DC1_DLE_VOLTE_LIN_TAS-1","192.168.56.1","28"),("DC1_DLE_VOLTE_LIN_TAS-2","192.168.56.17","28"),("DC1_DLE_VOLTE_LIN_CFX-1","192.168.56.33","28"),("DC1_DLE_VOLTE_LIN_CFX-2","192.168.56.49","28"),("DC1_DLE_VOLTE_LIN_EIMS","192.168.56.161","28"),("DC1_DLE_VOLTE_LIN_CMREPO","192.168.56.177","28"),("DC1_DLE_VOLTE_LIN_ASBC-1","192.168.56.65","28"),("DC1_DLE_VOLTE_LIN_ASBC-2","192.168.56.81","28"),("DC1_DLE_VOLTE_LIN_ENUM-1","192.168.57.246","29"))
-	
-	BuildNSXforVNF $VRFName $ESG1UplinkVLAN $ESG1UplinkAddress $ESG1DownlinkAddress $ESG1NeighborIPAddress1	$ESG1NeighborIPAddress2 $ESG2UplinkVLAN $ESG2UplinkAddress 	$ESG2DownlinkAddress $ESG2NeighborIPAddress1 $ESG2NeighborIPAddress2 $DLRForwardingIPAddress $DLRProtocolIPAddress $EdgeDatastore $VNFExternalNetworks	
-	
+		
 	My-Logger "NSX Configuration for VOLTE is completed" "white"
 	$EndTime = Get-Date
 	$duration = [math]::Round((New-TimeSpan -Start $StartTime -End $EndTime).TotalMinutes,2)
