@@ -12,25 +12,25 @@
 	- Create UDLR 
 	- Create UDLR LIFs for VNFs
 	- Create ESGs for IPv4 networks
-	- Create Anti-affinity rules for ESGs 
+	- * Create Anti-affinity rules for ESGs 
 	- Configure routing on ESG and UDLR(BGP)
-	- Configure route redistribution
+	- Configure route redistribution on UDLR and ESGs
 	- Configure floating static routes on ESGs
-	- Enable ECMP, Disable Graceful Restart and RFP
-	- Disable firewall on ECMP enabled ESGs and DLR
+	- Enable ECMP, Disable Graceful Restart and RPF
+	- Disable firewall on ECMP enabled ESGs and UDLR
 	- Set Syslog for all components
 #>
 
-$ScriptVersion = "1.5"
+$ScriptVersion = "1.7"
 $global:DCPrefix = "DC1"
 $global:VNFPrefix = "VOLTE"
 
 # vCenter Configuration
-$VIServer = "DC1vc003.corp.local"
-$PSCServer = "DC1vc002.corp.local"
+$VIServer = "DC1-vc.corp.local"
+$PSCServer = "DC1-psc.corp.local"
 
 # NSX Configuration
-$NSXHostname = "10.10.12.2"
+$NSXHostname = "10.10.12.43"
 $global:EdgeDatastore1 = "DC1_Edge_Cluster_1_DS01"
 $global:EdgeDatastore2 = "DC1_Edge_Cluster_1_DS02"
 $global:EdgeDatastore3 = "DC1_Edge_Cluster_1_DS03"
@@ -39,18 +39,18 @@ $global:EdgeVDS = "DC1_Edge_Datacenter_VDS_3"
 $global:ESGDefaultSubnetBits = "29" 
 $global:ESGFormFactor = "quadlarge" # use quadlarge for Prod
 
-$global:DLRDatastoreCluster= "DC1-TST_Cluster_1_DSC01"
-$global:DLRCluster = "DC1-TST_Cluster_1"
+$global:DLRDatastoreCluster= "DC1-CP_vCloud_Cluster_1_DSC01"
+$global:DLRCluster = "DC1-CP_vCloud_Cluster_1"
 $global:TransportZoneName = "DC1_RES_UTZ"
 $global:DLRDefaultSubnetBits = "28" 
 
 $global:AppliancePassword = "VMware1!VMware1!"
-$global:iBGPAS = "65705" 
-$global:eBGPAS = "65800"
+$global:iBGPAS = "64905" 
+$global:eBGPAS = "64700"
 $global:BGPKeepAliveTimer = "1"
 $global:BGPHoldDownTimer = "3"
 
-$global:sysLogServer = "10.20.116.142"
+$global:sysLogServer = "10.10.12.95"
 $global:sysLogServerPort = "514"
 
 # Static Deployment Parameters
@@ -85,7 +85,7 @@ $verboseLogFile = "ScriptLogs.log"
 
 	# Check PowerCli and PowerNSX modules
 	
-	My-Logger "Checking PowerCli and PowerNSX Modules ..." "Yellow"
+	<# My-Logger "Checking PowerCli and PowerNSX Modules ..." "Yellow"
 	
 	$PSVersion=$PSVersionTable.PSVersion.Major
 	
@@ -108,8 +108,7 @@ $verboseLogFile = "ScriptLogs.log"
 	$VIUsername = Read-Host -Prompt 'Please enter vCenter user name'
 	$VIPassword = Read-Host -Prompt 'Please enter vCenter password' -AsSecureString
 	$NSXUIPassword = Read-Host -Prompt 'Please enter NSX Manager password' -AsSecureString
-	
-	
+		
 	$VIPassword=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($VIPassword))
 	$NSXUIPassword=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($NSXUIPassword))
 	
@@ -170,8 +169,8 @@ $verboseLogFile = "ScriptLogs.log"
 		$ESG1UplinkName = $global:DCPrefix+"_ESG_"+$global:VNFPrefix+"_"+$VRFName+"_1_ACI"
 		$ESG2UplinkName = $global:DCPrefix+"_ESG_"+$global:VNFPrefix+"_"+$VRFName+"_2_ACI"
 		
-		$activePortsList = "Uplink 1" # Should be LACP
-		$UnusedUplinkPort = "Uplink 2" # Should be "Uplink 1", "Uplink 2"
+		$activePortsList = "LAG" # Should be LAG
+		$UnusedUplinkPort = "Uplink 1","Uplink 2" # Should be "Uplink 1", "Uplink 2"
 		
 		My-Logger "--- Deployment and configuration of NSX Environment for $VRFName is started --- " "Yellow"
 		
@@ -262,7 +261,7 @@ $verboseLogFile = "ScriptLogs.log"
 				$ldr | Set-NsxLogicalRouter -confirm:$false | out-null
 				
 				# Change DLR Name
-				My-Logger "DLR Hostname is setting ..." "Green"
+				My-Logger "Setting DLR Hostname ..." "Green"
 				$Ldr = Get-NsxLogicalRouter  -name $UDLRName
 				$Ldr.fqdn="$UDLRName"
 				$ldr | Set-NsxLogicalRouter -confirm:$false | out-null
@@ -432,7 +431,7 @@ $verboseLogFile = "ScriptLogs.log"
 			Get-NsxEdge $ESG1Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -EnableOspfRouteRedistribution:$false -confirm:$false | out-null
 			Get-NsxEdge $ESG1Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -EnableBgpRouteRedistribution:$true -confirm:$false | out-null
 			Get-NsxEdge $ESG1Name | Get-NsxEdgeRouting | Get-NsxEdgeRedistributionRule -Learner ospf | Remove-NsxEdgeRedistributionRule -Confirm:$false | out-null
-			Get-NsxEdge $ESG1Name | Get-NsxEdgeRouting | New-NsxEdgeRedistributionRule -Learner bgp -FromConnected -FromStatic -Action permit -confirm:$false | out-null
+			Get-NsxEdge $ESG1Name | Get-NsxEdgeRouting | New-NsxEdgeRedistributionRule -Learner bgp -FromStatic -Action permit -confirm:$false | out-null
 			
 		}
 		
@@ -475,7 +474,7 @@ $verboseLogFile = "ScriptLogs.log"
 		 	Get-NsxEdge $ESG2Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -EnableOspfRouteRedistribution:$false -confirm:$false | out-null
 			Get-NsxEdge $ESG2Name | Get-NsxEdgeRouting | Set-NsxEdgeRouting -EnableBgpRouteRedistribution:$true -confirm:$false | out-null
 			Get-NsxEdge $ESG2Name | Get-NsxEdgeRouting | Get-NsxEdgeRedistributionRule -Learner ospf | Remove-NsxEdgeRedistributionRule -Confirm:$false | out-null
-			Get-NsxEdge $ESG2Name | Get-NsxEdgeRouting | New-NsxEdgeRedistributionRule -Learner bgp -FromConnected -FromStatic -Action permit -confirm:$false | out-null
+			Get-NsxEdge $ESG2Name | Get-NsxEdgeRouting | New-NsxEdgeRedistributionRule -Learner bgp -FromStatic -Action permit -confirm:$false | out-null
 				
 		}
 		
@@ -508,35 +507,201 @@ $verboseLogFile = "ScriptLogs.log"
 
 	$StartTime = Get-Date
 	
-	# Create OUM Topology 
-	$VRFName="OUM"
-	$ESG1UplinkVLAN="3412"
-	$ESG1UplinkAddress= "172.29.179.6"
-	$ESG1DownlinkAddress="172.29.179.17"
-	$ESG1NeighborIPAddress1="172.29.179.1"
-	$ESG1NeighborIPAddress2="172.29.179.2"
-	$ESG2UplinkVLAN="3413"
-	$ESG2UplinkAddress="172.29.179.14"
-	$ESG2DownlinkAddress="172.29.179.18"
-	$ESG2NeighborIPAddress1="172.29.179.9"
-	$ESG2NeighborIPAddress2="172.29.179.10"
-	$DLRForwardingIPAddress="172.29.179.29"
-	$DLRProtocolIPAddress="172.29.179.30"
-	$EdgeDatastore =$global:EdgeDatastore2
-	$VNFExternalNetworks = @(("DC1_DLE_VOLTE_OUM_TAS-1","172.29.186.1","28"),
-	("DC1_DLE_VOLTE_OUM_TAS-2","172.29.186.17","28"),
-	("DC1_DLE_VOLTE_OUM_TAS-3","172.29.186.33","28"),
-	("DC1_DLE_VOLTE_OUM_CFX-1","172.29.186.49","28"),
-	("DC1_DLE_VOLTE_OUM_CFX-2","172.29.186.65","28"),
-	("DC1_DLE_VOLTE_OUM_EIMS","172.29.186.97","28"),
-	("DC1_DLE_VOLTE_OUM_CMREPO","172.29.186.81","29"),
-	("DC1_DLE_VOLTE_OUM_ASBC-1","172.29.186.113","28"),
-	("DC1_DLE_VOLTE_OUM_ASBC-2","172.29.186.129","28"),
-	("DC1_DLE_VOLTE_OUM_ASBC-3","172.29.186.145","28"))
-	
+	# Create LIN Topology 
+	$VRFName="LIN"
+	$ESG1UplinkVLAN="2300"
+	$ESG1UplinkAddress= "192.168.200.6"
+	$ESG1DownlinkAddress="192.168.200.17"
+	$ESG1NeighborIPAddress1="192.168.200.1"
+	$ESG1NeighborIPAddress2="192.168.200.2"
+	$ESG2UplinkVLAN="2301"
+	$ESG2UplinkAddress="192.168.200.14"
+	$ESG2DownlinkAddress="192.168.200.18"
+	$ESG2NeighborIPAddress1="192.168.200.9"
+	$ESG2NeighborIPAddress2="192.168.200.10"
+	$DLRForwardingIPAddress="192.168.200.29"
+	$DLRProtocolIPAddress="192.168.200.30"
+	$EdgeDatastore =$global:EdgeDatastore1
+	$VNFExternalNetworks = @(("DC1_DLR_VOLTE_LIN_TAS-1","192.168.223.1","28"),
+	("DC1_DLR_VOLTE_LIN_TAS-2","192.168.223.17","28"),
+	("DC1_DLR_VOLTE_LIN_TAS-3","192.168.223.33","28"))
 	
 	BuildNSXforVNF $VRFName $ESG1UplinkVLAN $ESG1UplinkAddress $ESG1DownlinkAddress $ESG1NeighborIPAddress1	$ESG1NeighborIPAddress2 $ESG2UplinkVLAN $ESG2UplinkAddress 	$ESG2DownlinkAddress $ESG2NeighborIPAddress1 $ESG2NeighborIPAddress2 $DLRForwardingIPAddress $DLRProtocolIPAddress $EdgeDatastore $VNFExternalNetworks	
 		
+	
+	# Create VOLTE_SIP Topology 
+	$VRFName="VOLTE-SIP"
+	$ESG1UplinkVLAN="2302"
+	$ESG1UplinkAddress= "192.168.159.6"
+	$ESG1DownlinkAddress="192.168.159.17"
+	$ESG1NeighborIPAddress1="192.168.159.1"
+	$ESG1NeighborIPAddress2="192.168.159.2"
+	$ESG2UplinkVLAN="2303"
+	$ESG2UplinkAddress="192.168.159.14"
+	$ESG2DownlinkAddress="192.168.159.18"
+	$ESG2NeighborIPAddress1="192.168.159.9"
+	$ESG2NeighborIPAddress2="192.168.159.10"
+	$DLRForwardingIPAddress="192.168.159.29"
+	$DLRProtocolIPAddress="192.168.159.30"
+	$EdgeDatastore =$global:EdgeDatastore2
+	$VNFExternalNetworks = @(("DC1_DLR_VOLTE_VOLTE_SIP_TAS-1","192.168.154.1","28"),
+	("DC1_DLR_VOLTE_VOLTE_SIP_TAS-2","192.168.154.17","28"),
+	("DC1_DLR_VOLTE_VOLTE_SIP_TAS-3","192.168.154.33","28"),
+	("DC1_DLR_VOLTE_VOLTE_SIP_CFX-1","192.168.154.49","28"),
+	("DC1_DLR_VOLTE_VOLTE_SIP_CFX-2","192.168.154.65","28"),
+	("DC1_DLR_VOLTE_VOLTE_SIP_EIMS","192.168.154.81","28"),
+	("DC1_DLR_VOLTE_VOLTE_SIP_ASBC-1","192.168.154.97","28"),
+	("DC1_DLR_VOLTE_VOLTE_SIP_ASBC-2","192.168.154.113","28"),
+	("DC1_DLR_VOLTE_VOLTE_SIP_ASBC-3","192.168.154.129","28"),
+	("DC1_DLR_VOLTE_VOLTE_SIP_MRF-1","192.168.154.145","28"),
+	("DC1_DLR_VOLTE_VOLTE_SIP_MRF-2","192.168.154.161","28"),
+	("DC1_DLR_VOLTE_VOLTE_SIP_MRF-3","192.168.154.177","28"),
+	("DC1_DLR_VOLTE_VOLTE_SIP_MRF-4","192.168.154.193","28"),
+	("DC1_DLR_VOLTE_VOLTE_SIP_MRF-5","192.168.154.209","28"),
+	("DC1_DLR_VOLTE_VOLTE_SIP_MRF-6","192.168.154.225","28"),
+	("DC1_DLR_VOLTE_VOLTE_SIP_MRF-7","192.168.154.241","28"),
+	("DC1_DLR_VOLTE_VOLTE_SIP_ENUM-1","192.168.155.1","28"),
+	("DC1_DLR_VOLTE_VOLTE_SIP_ENUM-2","192.168.155.17","28"))
+		
+	BuildNSXforVNF $VRFName $ESG1UplinkVLAN $ESG1UplinkAddress $ESG1DownlinkAddress $ESG1NeighborIPAddress1	$ESG1NeighborIPAddress2 $ESG2UplinkVLAN $ESG2UplinkAddress 	$ESG2DownlinkAddress $ESG2NeighborIPAddress1 $ESG2NeighborIPAddress2 $DLRForwardingIPAddress $DLRProtocolIPAddress $EdgeDatastore $VNFExternalNetworks	
+		
+	
+	# Create SIGTRAN1 Topology 
+	$VRFName="SIGTRAN1"
+	$ESG1UplinkVLAN="2304"
+	$ESG1UplinkAddress= "192.168..120.6"
+	$ESG1DownlinkAddress="192.168..120.17"
+	$ESG1NeighborIPAddress1="192.168..120.1"
+	$ESG1NeighborIPAddress2="192.168..120.2"
+	$ESG2UplinkVLAN="2305"
+	$ESG2UplinkAddress="192.168..120.14"
+	$ESG2DownlinkAddress="192.168..120.18"
+	$ESG2NeighborIPAddress1="192.168..120.9"
+	$ESG2NeighborIPAddress2="192.168..120.10"
+	$DLRForwardingIPAddress="192.168..120.29"
+	$DLRProtocolIPAddress="192.168..120.30"
+	$EdgeDatastore =$global:EdgeDatastore3
+	$VNFExternalNetworks = @(("DC1_DLR_VOLTE_SIGTRAN1_TAS-1","192.168..124.1","28"),
+	("DC1_DLR_VOLTE_SIGTRAN1_TAS-2","192.168..124.17","28"),
+	("DC1_DLR_VOLTE_SIGTRAN1_TAS-3","192.168..124.33","28"),
+	("DC1_DLR_VOLTE_SIGTRAN1_CFX-1","192.168..124.49","28"),
+	("DC1_DLR_VOLTE_SIGTRAN1_CFX-2","192.168..124.65","28"),
+	("DC1_DLR_VOLTE_SIGTRAN1_EIMS","192.168..124.81","28"),
+	("DC1_DLR_VOLTE_SIGTRAN1_ENUM-1","192.168..124.97","28"),
+	("DC1_DLR_VOLTE_SIGTRAN1_ENUM-2","192.168..124.113","28"))
+	
+	BuildNSXforVNF $VRFName $ESG1UplinkVLAN $ESG1UplinkAddress $ESG1DownlinkAddress $ESG1NeighborIPAddress1	$ESG1NeighborIPAddress2 $ESG2UplinkVLAN $ESG2UplinkAddress 	$ESG2DownlinkAddress $ESG2NeighborIPAddress1 $ESG2NeighborIPAddress2 $DLRForwardingIPAddress $DLRProtocolIPAddress $EdgeDatastore $VNFExternalNetworks	
+	
+	
+	# Create SIGTRAN2 Topology 
+	$VRFName="SIGTRAN2"
+	$ESG1UplinkVLAN="2306"
+	$ESG1UplinkAddress= "192.168..248.6"
+	$ESG1DownlinkAddress="192.168..248.17"
+	$ESG1NeighborIPAddress1="192.168..248.1"
+	$ESG1NeighborIPAddress2="192.168..248.2"
+	$ESG2UplinkVLAN="2307"
+	$ESG2UplinkAddress="192.168..248.14"
+	$ESG2DownlinkAddress="192.168..248.18"
+	$ESG2NeighborIPAddress1="192.168..248.9"
+	$ESG2NeighborIPAddress2="192.168..248.10"
+	$DLRForwardingIPAddress="192.168..248.29"
+	$DLRProtocolIPAddress="192.168..248.30"
+	$EdgeDatastore =$global:EdgeDatastore1
+	$VNFExternalNetworks = @(("DC1_DLR_VOLTE_SIGTRAN2_TAS-1","192.168..252.1","28"),
+	("DC1_DLR_VOLTE_SIGTRAN2_TAS-2","192.168..252.17","28"),
+	("DC1_DLR_VOLTE_SIGTRAN2_TAS-3","192.168..252.33","28"),
+	("DC1_DLR_VOLTE_SIGTRAN2_CFX-1","192.168..252.49","28"),
+	("DC1_DLR_VOLTE_SIGTRAN2_CFX-2","192.168..252.65","28"),
+	("DC1_DLR_VOLTE_SIGTRAN2_EIMS","192.168..252.81","28"),
+	("DC1_DLR_VOLTE_SIGTRAN2_ENUM-1","192.168..252.97","28"),
+	("DC1_DLR_VOLTE_SIGTRAN2_ENUM-2","192.168..252.113","28"))
+	
+	BuildNSXforVNF $VRFName $ESG1UplinkVLAN $ESG1UplinkAddress $ESG1DownlinkAddress $ESG1NeighborIPAddress1	$ESG1NeighborIPAddress2 $ESG2UplinkVLAN $ESG2UplinkAddress 	$ESG2DownlinkAddress $ESG2NeighborIPAddress1 $ESG2NeighborIPAddress2 $DLRForwardingIPAddress $DLRProtocolIPAddress $EdgeDatastore $VNFExternalNetworks	
+	
+	
+	# Create CONTROL Topology 
+	$VRFName="CONTROL"
+	$ESG1UplinkVLAN="2308"
+	$ESG1UplinkAddress= "192.168..248.6"
+	$ESG1DownlinkAddress="192.168.201.17"
+	$ESG1NeighborIPAddress1="192.168.201.1"
+	$ESG1NeighborIPAddress2="192.168.201.2"
+	$ESG2UplinkVLAN="2309"
+	$ESG2UplinkAddress="192.168.201.14"
+	$ESG2DownlinkAddress="192.168.201.18"
+	$ESG2NeighborIPAddress1="192.168..248.9"
+	$ESG2NeighborIPAddress2="192.168..248.10"
+	$DLRForwardingIPAddress="192.168.201.29"
+	$DLRProtocolIPAddress="192.168.201.30"
+	$EdgeDatastore =$global:EdgeDatastore2
+	$VNFExternalNetworks = @(("DC1_DLR_VOLTE_CONTROL_ASBC-1","192.168.165.1","28"),
+	("DC1_DLR_VOLTE_CONTROL_ASBC-2","192.168.165.17","28"),
+	("DC1_DLR_VOLTE_CONTROL_ASBC-3","192.168.165.33","28"))
+	
+	BuildNSXforVNF $VRFName $ESG1UplinkVLAN $ESG1UplinkAddress $ESG1DownlinkAddress $ESG1NeighborIPAddress1	$ESG1NeighborIPAddress2 $ESG2UplinkVLAN $ESG2UplinkAddress 	$ESG2DownlinkAddress $ESG2NeighborIPAddress1 $ESG2NeighborIPAddress2 $DLRForwardingIPAddress $DLRProtocolIPAddress $EdgeDatastore $VNFExternalNetworks	
+	
+	
+	# Create BILL Topology 
+	$VRFName="BILL"
+	$ESG1UplinkVLAN="2310"
+	$ESG1UplinkAddress= "10.66.183.6"
+	$ESG1DownlinkAddress="10.66.183.17"
+	$ESG1NeighborIPAddress1="10.66.183.1"
+	$ESG1NeighborIPAddress2="10.66.183.2"
+	$ESG2UplinkVLAN="2311"
+	$ESG2UplinkAddress="10.66.183.14"
+	$ESG2DownlinkAddress="10.66.183.18"
+	$ESG2NeighborIPAddress1="10.66.183.9"
+	$ESG2NeighborIPAddress2="10.66.183.10"
+	$DLRForwardingIPAddress="10.66.183.29"
+	$DLRProtocolIPAddress="10.66.183.30"
+	$EdgeDatastore =$global:EdgeDatastore3
+	$VNFExternalNetworks = @(("DC1_DLR_VOLTE_BILL_TAS-1","10.66.184.1","28"),
+	("DC1_DLR_VOLTE_BILL_TAS-2","10.66.184.17","28"),
+	("DC1_DLR_VOLTE_BILL_TAS-3","10.66.184.33","28"))
+
+	
+	BuildNSXforVNF $VRFName $ESG1UplinkVLAN $ESG1UplinkAddress $ESG1DownlinkAddress $ESG1NeighborIPAddress1	$ESG1NeighborIPAddress2 $ESG2UplinkVLAN $ESG2UplinkAddress 	$ESG2DownlinkAddress $ESG2NeighborIPAddress1 $ESG2NeighborIPAddress2 $DLRForwardingIPAddress $DLRProtocolIPAddress $EdgeDatastore $VNFExternalNetworks	
+	
+	# Create OUM Topology 
+	$VRFName="OUM"
+	$ESG1UplinkVLAN="2312"
+	$ESG1UplinkAddress= "10.240.179.6"
+	$ESG1DownlinkAddress="10.219.179.17"
+	$ESG1NeighborIPAddress1="10.219.179.1"
+	$ESG1NeighborIPAddress2="10.219.179.2"
+	$ESG2UplinkVLAN="2313"
+	$ESG2UplinkAddress="10.219.179.14"
+	$ESG2DownlinkAddress="10.219.179.18"
+	$ESG2NeighborIPAddress1="10.219.179.9"
+	$ESG2NeighborIPAddress2="10.219.179.10"
+	$DLRForwardingIPAddress="10.219.179.29"
+	$DLRProtocolIPAddress="10.219.179.30"
+	$EdgeDatastore =$global:EdgeDatastore1
+	$VNFExternalNetworks = @(("DC1_DLR_VOLTE_OUM_TAS-1","10.219.180.1","28"),
+	("DC1_DLR_VOLTE_OUM_TAS-2","10.219.180.17","28"),
+	("DC1_DLR_VOLTE_OUM_TAS-3","10.219.180.33","28"),
+	("DC1_DLR_VOLTE_OUM_CFX-1","10.219.180.49","28"),
+	("DC1_DLR_VOLTE_OUM_CFX-2","10.219.180.65","28"),
+	("DC1_DLR_VOLTE_OUM_EIMS","10.219.180.97","28"),
+	("DC1_DLR_VOLTE_OUM_CMREPO","10.219.180.81","29"),
+	("DC1_DLR_VOLTE_OUM_ASBC-1","10.219.180.113","28"),
+	("DC1_DLR_VOLTE_OUM_ASBC-2","10.219.180.129","28"),
+	("DC1_DLR_VOLTE_OUM_ASBC-3","10.219.180.145","28"),
+	("DC1_DLR_VOLTE_OUM_MRF-1","10.219.180.161","28"),
+	("DC1_DLR_VOLTE_OUM_MRF-2","10.219.180.177","28"),
+	("DC1_DLR_VOLTE_OUM_MRF-3","10.219.180.193","28"),
+	("DC1_DLR_VOLTE_OUM_MRF-4","10.219.180.209","28"),
+	("DC1_DLR_VOLTE_OUM_MRF-5","10.219.180.225","28"),
+	("DC1_DLR_VOLTE_OUM_MRF-6","10.219.180.241","28"),
+	("DC1_DLR_VOLTE_OUM_MRF-7","10.219.181.1","28"),
+	("DC1_DLR_VOLTE_OUM_ENUM-1","10.219.181.17","28"),
+	("DC1_DLR_VOLTE_OUM_ENUM-2","10.219.181.33","28"))
+	
+	
+	BuildNSXforVNF $VRFName $ESG1UplinkVLAN $ESG1UplinkAddress $ESG1DownlinkAddress $ESG1NeighborIPAddress1	$ESG1NeighborIPAddress2 $ESG2UplinkVLAN $ESG2UplinkAddress 	$ESG2DownlinkAddress $ESG2NeighborIPAddress1 $ESG2NeighborIPAddress2 $DLRForwardingIPAddress $DLRProtocolIPAddress $EdgeDatastore $VNFExternalNetworks	
+	
 	My-Logger "NSX Configuration for VOLTE is completed" "white"
 	$EndTime = Get-Date
 	$duration = [math]::Round((New-TimeSpan -Start $StartTime -End $EndTime).TotalMinutes,2)
