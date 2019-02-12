@@ -21,7 +21,7 @@
 	- Set Syslog for all components
 #>
 
-$ScriptVersion = "1.7"
+$ScriptVersion = "1.8"
 $global:DCPrefix = "DC1"
 $global:VNFPrefix = "VOLTE"
 
@@ -193,7 +193,7 @@ $verboseLogFile = "ScriptLogs.log"
 			else {
 				$ESG2Uplink = Get-VDSwitch -Name $global:EdgeVDS | New-VDPortgroup -Name $ESG2UplinkName -VLanId $ESG2UplinkVLAN 
 				My-Logger "Setting Teaming for $ESG2UplinkName ..." "Green"
-				Get-VDSwitch $global:EdgeVDS | Get-VDPortgroup $ESG2UplinkName | Get-VDUplinkTeamingPolicy | Set-VDUplinkTeamingPolicy -ActiveUplinkPort $activePortsList -UnusedUplinkPort $UnusedUplinkPort |out-null
+				Get-VDSwitch $global:EdgeVDS | Get-VDPortgroup $ESG2UplinkName | Get-VDUplinkTeamingPolicy | Set-VDUplinkTeamingPolicy -ActiveUplinkPort $activePortsList -UnusedUplinkPort $UnusedUplinkPort -LoadBalancingPolicy  "LoadBalanceIP" |out-null
 
 			}				
 		
