@@ -33,8 +33,8 @@ write-host -ForegroundColor green "Cluster	-	Host	-	VMKernel	-	VMKernel IP	-	Pac
 						$arguments.interface = "vmk3"
 						$arguments.size = "1600"
 						$pingStatus = $esxcli.network.diag.ping.Invoke($arguments)
-							
-							write-host $Cluster "-" $VMHost "-" $VMKernel.Name "-" $VMKernel.IP "-" $pingStatus.summary.PacketLost
+						write-host $Cluster "-" $VMHost "-" $VMKernel.Name "-" $VMKernel.IP "-" $pingStatus.summary.PacketLost
+						
 						}
 					} 
 
