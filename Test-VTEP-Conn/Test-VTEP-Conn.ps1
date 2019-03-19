@@ -38,7 +38,7 @@ write-host -ForegroundColor green "Cluster	-	Host	-	VMKernel	-	VMKernel IP	-	Pac
 						$PacketLost=$pingStatus.summary.PacketLost
 					
 						$OutPut= $Cluster.Name + "-" + $VMHost.Name + "-" + $VMKernelName + "-" + $VMKernelIP + "-" + $PacketLost 
-						Write-Host $OutPutd
+						Write-Host $OutPut
 						$OutPut | out-file -append output.txt
 					}
 				
