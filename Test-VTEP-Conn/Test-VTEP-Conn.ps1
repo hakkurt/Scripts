@@ -20,8 +20,7 @@ write-host -ForegroundColor green "Cluster	-	Host	-	VMKernel	-	VMKernel IP	-	Pac
 			
 				ForEach ($VmKernel in $VMKernels){
 				
-					if(!$VMKernel.VMotionEnabled)  {     
-						if(!$VMKernel.ManagementTrafficEnabled)		{			
+					if($VMKernel.PortGroupName -like  "*vxw-*")	{
 						
 						$esxcli = Get-ESXCLI -vmhost $sourcehost -V2 
 
@@ -33,10 +32,16 @@ write-host -ForegroundColor green "Cluster	-	Host	-	VMKernel	-	VMKernel IP	-	Pac
 						$arguments.interface = "vmk3"
 						$arguments.size = "1600"
 						$pingStatus = $esxcli.network.diag.ping.Invoke($arguments)
-						write-host $Cluster "-" $VMHost "-" $VMKernel.Name "-" $VMKernel.IP "-" $pingStatus.summary.PacketLost
 						
-						}
-					} 
+						$VMKernelName=$VMKernel.Name
+						$VMKernelIP=$VMKernel.IP
+						$PacketLost=$pingStatus.summary.PacketLost
+					
+						$OutPut= $Cluster.Name + "-" + $VMHost.Name + "-" + $VMKernelName + "-" + $VMKernelIP + "-" + $PacketLost 
+						Write-Host $OutPutd
+						$OutPut | out-file -append output.txt
+					}
+				
 
 				}
 		}
